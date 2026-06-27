@@ -1,12 +1,13 @@
 "use client";
 
 import { nanoid } from "nanoid";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ensureThread,
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { RoleplayCtx } from "@/lib/roleplay-store";
+import { useStateSync } from "@/hooks/use-state-sync";
 import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
 
 function parseSillyTavern(data: Record<string, unknown>): Character {
@@ -183,6 +184,53 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
   );
   const [divinityAI, setDivinityAIState] = useState<DivinityAIState>(defaultDivinityAI);
   const [loreDetection, setLoreDetectionState] = useState<LoreDetection>(defaultLoreDetection);
+
+  // ---- Cross-device persistence (Cloudflare R2 via /api/state) -------------
+  // Snapshot of everything we want to survive across devices / browser clears.
+  const syncSnapshot = useMemo(
+    () => ({
+      characters,
+      galleryItems,
+      loreBooks,
+      loreEntries,
+      storyNodes,
+    }),
+    [characters, galleryItems, loreBooks, loreEntries, storyNodes]
+  );
+
+  // Apply a snapshot pulled from the server: update both React state and the
+  // localStorage cache so a reload stays consistent.
+  const applyRemoteState = useCallback(
+    (remote: {
+      characters: unknown[];
+      galleryItems: unknown[];
+      loreBooks: unknown[];
+      loreEntries: unknown[];
+      storyNodes: unknown[];
+    }) => {
+      const chars = remote.characters as Character[];
+      const gallery = remote.galleryItems as MediaItem[];
+      const books = remote.loreBooks as LoreBook[];
+      const entries = remote.loreEntries as LoreEntry[];
+      const nodes = remote.storyNodes as StoryNode[];
+
+      setCharacters(chars);
+      setGalleryItems(gallery);
+      setLoreBooks(books);
+      setLoreEntries(entries);
+      setStoryNodes(nodes);
+
+      saveJSON(STORAGE_KEY_CHARACTERS, chars);
+      saveJSON(STORAGE_KEY_GALLERY, gallery);
+      saveJSON(STORAGE_KEY_LOREBOOKS, books);
+      saveJSON(STORAGE_KEY_LORE, entries);
+      saveJSON(STORAGE_KEY_NODES, nodes);
+    },
+    []
+  );
+
+  useStateSync(syncSnapshot, applyRemoteState);
+
 
   const handleImportCharacter = useCallback((data: unknown): Character => {
     const char = importCharacterFromJson(data);
