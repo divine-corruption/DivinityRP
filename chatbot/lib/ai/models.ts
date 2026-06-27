@@ -33,15 +33,28 @@ export const chatModels: ChatModel[] = [
 export async function getCapabilities(): Promise<
   Record<string, ModelCapabilities>
 > {
+  // The app talks to xAI directly (not the Vercel AI Gateway), so we don't rely
+  // on a gateway lookup that may 404 and incorrectly disable tools/vision.
+  // Grok 4.3 supports tools, vision (image input) and reasoning.
+  const KNOWN: Record<string, ModelCapabilities> = {
+    "xai/grok-4.3": { tools: true, vision: true, reasoning: true },
+  };
+
   const results = await Promise.all(
     chatModels.map(async (model) => {
+      if (KNOWN[model.id]) {
+        return [model.id, KNOWN[model.id]] as const;
+      }
       try {
         const res = await fetch(
           `https://ai-gateway.vercel.sh/v1/models/${model.id}/endpoints`,
           { next: { revalidate: 86_400 } }
         );
         if (!res.ok) {
-          return [model.id, { tools: false, vision: false, reasoning: false }];
+          return [
+            model.id,
+            { tools: true, vision: true, reasoning: false },
+          ] as const;
         }
 
         const json = await res.json();
@@ -63,9 +76,12 @@ export async function getCapabilities(): Promise<
             vision: inputModalities.has("image"),
             reasoning: params.has("reasoning"),
           },
-        ];
+        ] as const;
       } catch {
-        return [model.id, { tools: false, vision: false, reasoning: false }];
+        return [
+          model.id,
+          { tools: true, vision: true, reasoning: false },
+        ] as const;
       }
     })
   );

@@ -298,15 +298,21 @@ export async function POST(request: Request) {
         }
       },
       onError: (error) => {
+        const msg = error instanceof Error ? error.message : String(error);
         if (
-          error instanceof Error &&
-          error.message?.includes(
+          msg.includes(
             "AI Gateway requires a valid credit card on file to service requests"
           )
         ) {
           return "AI Gateway requires a valid credit card on file to service requests. Please visit https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card to add a card and unlock your free credits.";
         }
-        return "Oops, an error occurred!";
+        // Surface the real upstream error so failures are diagnosable instead
+        // of silently showing a generic message.
+        console.error("streamText error:", msg);
+        if (/api key|unauthorized|401|invalid_api_key/i.test(msg)) {
+          return "The model provider rejected the request (check XAI_API_KEY). Details: " + msg;
+        }
+        return `Model error: ${msg}`;
       },
     });
 
