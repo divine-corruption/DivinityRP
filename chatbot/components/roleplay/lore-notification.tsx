@@ -37,6 +37,8 @@ export function LoreNotification() {
       keys: keys
         ? keys.split(",").map((k) => k.trim()).filter(Boolean)
         : loreDetection.suggestion.keys,
+      category: loreDetection.suggestion.category,
+      imagePrompt: loreDetection.suggestion.imagePrompt,
       approved: true,
       source: "detection",
       createdAt: Date.now(),

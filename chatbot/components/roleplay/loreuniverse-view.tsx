@@ -2,7 +2,7 @@
 
 import { nanoid } from "nanoid";
 import {
-  Plus, Trash2, Sparkles, Send, Loader2, Check, X, Edit3, BookOpen,
+  Plus, Trash2, Sparkles, Send, Loader2, Check, X, Edit3, BookOpen, Image as ImageIcon,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
@@ -111,6 +111,30 @@ function LoreBookManager({
   );
 }
 
+// --- Category styling ---
+
+const CATEGORY_STYLES: Record<string, { label: string; cls: string }> = {
+  character: { label: "Character", cls: "bg-blue-500/15 text-blue-400" },
+  location: { label: "Location", cls: "bg-emerald-500/15 text-emerald-400" },
+  faction: { label: "Faction", cls: "bg-red-500/15 text-red-400" },
+  item: { label: "Item", cls: "bg-amber-500/15 text-amber-400" },
+  event: { label: "Event", cls: "bg-purple-500/15 text-purple-400" },
+  concept: { label: "Concept", cls: "bg-cyan-500/15 text-cyan-400" },
+  creature: { label: "Creature", cls: "bg-lime-500/15 text-lime-400" },
+  other: { label: "Lore", cls: "bg-primary/15 text-primary" },
+};
+
+function CategoryBadge({ category }: { category?: string }) {
+  const s = CATEGORY_STYLES[category ?? "other"] ?? CATEGORY_STYLES.other;
+  return (
+    <span
+      className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${s.cls}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 // --- Lore Card Component ---
 
 function LoreCard({
@@ -125,6 +149,10 @@ function LoreCard({
     content: string;
     keys: string[];
     reasoning: string;
+    category?: string;
+    image?: string;
+    imagePrompt?: string;
+    imageLoading?: boolean;
   };
   onApprove: (s: typeof suggestion) => void;
   onEdit: (s: typeof suggestion) => void;
@@ -136,7 +164,31 @@ function LoreCard({
   const [keys, setKeys] = useState(suggestion.keys.join(", "));
 
   return (
-    <div className="rounded-xl border border-primary/20 bg-card/80 p-4 shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-primary/20 bg-card/80 shadow-sm">
+      {/* Visual cover */}
+      {(suggestion.image || suggestion.imageLoading) && !editing && (
+        <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
+          {suggestion.image ? (
+            <img
+              src={suggestion.image}
+              alt={suggestion.title}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center gap-2 bg-gradient-to-br from-primary/10 to-muted">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              <span className="text-[11px] text-muted-foreground">
+                Conjuring visual…
+              </span>
+            </div>
+          )}
+          <div className="absolute left-2 top-2">
+            <CategoryBadge category={suggestion.category} />
+          </div>
+        </div>
+      )}
+
+      <div className="p-4">
       {editing ? (
         <div className="space-y-2">
           <input
@@ -185,7 +237,12 @@ function LoreCard({
         <>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-medium">{suggestion.title}</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-medium">{suggestion.title}</h4>
+                {!(suggestion.image || suggestion.imageLoading) && (
+                  <CategoryBadge category={suggestion.category} />
+                )}
+              </div>
               <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4">
                 {suggestion.content}
               </p>
@@ -234,6 +291,7 @@ function LoreCard({
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
@@ -244,7 +302,7 @@ export function LoreUniverseView() {
   const {
     loreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
     loreBooks, addLoreBook, deleteLoreBook,
-    divinityAI, setDivinityAI, addDivinitySuggestion, removeDivinitySuggestion, clearDivinitySuggestions,
+    divinityAI, setDivinityAI, addDivinitySuggestion, updateDivinitySuggestion, removeDivinitySuggestion, clearDivinitySuggestions,
     characters, selectedCharacter,
   } = useRoleplay();
 
@@ -267,7 +325,14 @@ export function LoreUniverseView() {
 
   // Parse Lore Cards from AI response
   const parseLoreCards = (text: string) => {
-    const cards: { title: string; content: string; keys: string[]; reasoning: string }[] = [];
+    const cards: {
+      title: string;
+      content: string;
+      keys: string[];
+      reasoning: string;
+      category?: string;
+      imagePrompt?: string;
+    }[] = [];
     const regex = /---LORECARD_START---\s*([\s\S]*?)---LORECARD_END---/g;
     let match;
 
@@ -275,17 +340,21 @@ export function LoreUniverseView() {
       try {
         const block = match[1];
         const titleMatch = block.match(/title:\s*"([^"]*)"/);
+        const categoryMatch = block.match(/category:\s*"([^"]*)"/);
         const contentMatch = block.match(/content:\s*"([\s\S]*?)"(?=\s*keys:)/);
         const keysMatch = block.match(/keys:\s*\[([^\]]*)\]/);
+        const imagePromptMatch = block.match(/image_prompt:\s*"([\s\S]*?)"(?=\s*reasoning:)/);
         const reasoningMatch = block.match(/reasoning:\s*"([^"]*)"/);
 
         if (titleMatch || contentMatch) {
           cards.push({
             title: titleMatch?.[1]?.trim() ?? "Untitled Lore",
+            category: categoryMatch?.[1]?.trim(),
             content: contentMatch?.[1]?.trim() ?? "",
             keys: keysMatch
               ? keysMatch[1].split(",").map((k) => k.trim().replace(/"/g, ""))
               : [],
+            imagePrompt: imagePromptMatch?.[1]?.trim(),
             reasoning: reasoningMatch?.[1]?.trim() ?? "",
           });
         }
@@ -294,6 +363,36 @@ export function LoreUniverseView() {
       }
     }
     return cards;
+  };
+
+  // Generate a cover image for a lore card via the Imagine API (best-effort).
+  const generateLoreImage = async (
+    suggestionId: string,
+    prompt: string
+  ) => {
+    try {
+      const res = await fetch("/api/imagine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `Lore illustration, cinematic concept art: ${prompt}`,
+          aspect_ratio: "16:9",
+          style: "fantasy",
+        }),
+      });
+      if (!res.ok) {
+        updateDivinitySuggestion(suggestionId, { imageLoading: false });
+        return;
+      }
+      const data = await res.json();
+      const url = data.url ?? data.data?.[0]?.url;
+      updateDivinitySuggestion(suggestionId, {
+        image: url,
+        imageLoading: false,
+      });
+    } catch {
+      updateDivinitySuggestion(suggestionId, { imageLoading: false });
+    }
   };
 
   const handleDivinityChat = async () => {
@@ -339,15 +438,24 @@ export function LoreUniverseView() {
       // Parse Lore Cards
       const cards = parseLoreCards(aiContent);
       for (const card of cards) {
+        const sid = nanoid();
+        const willGenerate = Boolean(card.imagePrompt);
         addDivinitySuggestion({
-          id: nanoid(),
+          id: sid,
           title: card.title,
           content: card.content,
           keys: card.keys,
+          category: (card.category as LoreEntry["category"]) ?? "other",
+          imagePrompt: card.imagePrompt,
+          imageLoading: willGenerate,
           reasoning: card.reasoning,
           lorebookId: divinityAI.selectedLorebookId ?? undefined,
           createdAt: Date.now(),
         });
+        // Kick off cover-art generation in the background.
+        if (card.imagePrompt) {
+          void generateLoreImage(sid, card.imagePrompt);
+        }
       }
 
       if (cards.length > 0) {
@@ -361,12 +469,24 @@ export function LoreUniverseView() {
     }
   };
 
-  const handleApproveSuggestion = (s: { id: string; title: string; content: string; keys: string[]; reasoning: string }) => {
+  const handleApproveSuggestion = (s: {
+    id: string;
+    title: string;
+    content: string;
+    keys: string[];
+    reasoning: string;
+    category?: LoreEntry["category"];
+    image?: string;
+    imagePrompt?: string;
+  }) => {
     addLoreEntry({
       id: nanoid(),
       title: s.title,
       content: s.content,
       keys: s.keys,
+      category: s.category ?? "other",
+      image: s.image,
+      imagePrompt: s.imagePrompt,
       lorebookId: divinityAI.selectedLorebookId ?? undefined,
       approved: true,
       source: "divinity",
@@ -377,7 +497,16 @@ export function LoreUniverseView() {
     toast.success(`Lore saved: ${s.title}`);
   };
 
-  const handleEditSuggestion = (s: { id: string; title: string; content: string; keys: string[]; reasoning: string }) => {
+  const handleEditSuggestion = (s: {
+    id: string;
+    title: string;
+    content: string;
+    keys: string[];
+    reasoning: string;
+    category?: LoreEntry["category"];
+    image?: string;
+    imagePrompt?: string;
+  }) => {
     handleApproveSuggestion(s);
   };
 
@@ -494,8 +623,20 @@ export function LoreUniverseView() {
               <LoreCard
                 key={s.id}
                 suggestion={s}
-                onApprove={(card) => handleApproveSuggestion({ ...card, id: s.id })}
-                onEdit={(card) => handleEditSuggestion({ ...card, id: s.id })}
+                onApprove={(card) =>
+                  handleApproveSuggestion({
+                    ...card,
+                    id: s.id,
+                    category: card.category as LoreEntry["category"],
+                  } as Parameters<typeof handleApproveSuggestion>[0])
+                }
+                onEdit={(card) =>
+                  handleEditSuggestion({
+                    ...card,
+                    id: s.id,
+                    category: card.category as LoreEntry["category"],
+                  } as Parameters<typeof handleEditSuggestion>[0])
+                }
                 onDeny={handleDenySuggestion}
               />
             ))}
@@ -700,12 +841,25 @@ export function LoreUniverseView() {
           {filteredEntries.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-xl border border-border/30 bg-card p-4"
+              className="overflow-hidden rounded-xl border border-border/30 bg-card"
             >
-              <div className="flex items-start justify-between">
+              {entry.image && (
+                <div className="relative aspect-[16/6] w-full overflow-hidden bg-muted">
+                  <img
+                    src={entry.image}
+                    alt={entry.title}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute left-2 top-2">
+                    <CategoryBadge category={entry.category} />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start justify-between p-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-medium">{entry.title}</h3>
+                    {!entry.image && <CategoryBadge category={entry.category} />}
                     {entry.source && (
                       <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                         {entry.source}
@@ -729,6 +883,41 @@ export function LoreUniverseView() {
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0 ml-2">
+                  {!entry.image && entry.imagePrompt && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        toast.info("Generating visual…");
+                        try {
+                          const res = await fetch("/api/imagine", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              prompt: `Lore illustration, cinematic concept art: ${entry.imagePrompt}`,
+                              aspect_ratio: "16:9",
+                              style: "fantasy",
+                            }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            const url = data.url ?? data.data?.[0]?.url;
+                            if (url) {
+                              updateLoreEntry(entry.id, { image: url });
+                              toast.success("Visual added");
+                            }
+                          } else {
+                            toast.error("Couldn't generate visual");
+                          }
+                        } catch {
+                          toast.error("Couldn't generate visual");
+                        }
+                      }}
+                      className="rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
+                      title="Generate visual"
+                    >
+                      <ImageIcon className="size-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

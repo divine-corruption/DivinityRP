@@ -1,6 +1,7 @@
 "use client";
 
 import { Hammer, Download, Sparkles, Loader2, Upload, X, ImageIcon } from "lucide-react";
+import { nanoid } from "nanoid";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { useRoleplay } from "@/lib/roleplay-store";
@@ -9,12 +10,19 @@ interface ForgedCharacter {
   name: string;
   description: string;
   personality: string;
+  appearance?: string;
   scenario: string;
   first_mes: string;
   mes_example: string;
   tags: string[];
   system_prompt_override?: string;
   alternate_greetings?: string[];
+  story_arcs?: {
+    title: string;
+    tone?: string;
+    summary?: string;
+    hook?: string;
+  }[];
   creator_notes?: string;
   image_analysis: {
     scene: string;
@@ -31,7 +39,7 @@ const SCENES = [
 ] as const;
 
 export function CharacterForger() {
-  const { importCharacter } = useRoleplay();
+  const { importCharacter, addStoryNode } = useRoleplay();
   const [concept, setConcept] = useState("");
   const [name, setName] = useState("");
   const [appearance, setAppearance] = useState("");
@@ -92,18 +100,19 @@ export function CharacterForger() {
     setImages((prev) => ({ ...prev, [scene]: null }));
   };
 
-  const allImagesReady = SCENES.every((s) => {
+  const uploadedImages = SCENES.filter((s) => {
     const img = images[s.key];
     return img && img.url;
   });
+  const hasAnyImage = uploadedImages.length > 0;
 
   const handleForge = async () => {
     if (!concept.trim()) {
       toast.error("Enter at least a concept");
       return;
     }
-    if (!allImagesReady) {
-      toast.error("Upload all 4 reference images first");
+    if (!hasAnyImage) {
+      toast.error("Upload at least one reference image first");
       return;
     }
 
@@ -111,7 +120,7 @@ export function CharacterForger() {
     setForging(true);
 
     try {
-      const reference_images = SCENES.map((s) => ({
+      const reference_images = uploadedImages.map((s) => ({
         scene: s.key,
         url: images[s.key]!.url,
       }));
@@ -191,7 +200,31 @@ export function CharacterForger() {
         caption: `${ia.scene}: ${ia.description.slice(0, 80)}`,
       })),
     });
-    toast.success(`Imported ${char.name} into engine`);
+
+    // Seed the forged story arcs as selectable Character Story Nodes.
+    const arcs = result.story_arcs ?? [];
+    let arcCount = 0;
+    for (const arc of arcs) {
+      if (!arc?.title) continue;
+      addStoryNode({
+        id: nanoid(),
+        characterId: char.id,
+        title: arc.title,
+        tone: arc.tone,
+        summary: arc.summary ?? "",
+        scenario: arc.hook ? `${arc.summary ?? ""}\n\n${arc.hook}`.trim() : arc.summary,
+        kind: "arc",
+        chatId: "",
+        createdAt: Date.now(),
+      });
+      arcCount++;
+    }
+
+    toast.success(
+      arcCount > 0
+        ? `Imported ${char.name} + ${arcCount} story arcs`
+        : `Imported ${char.name} into engine`
+    );
   };
 
   return (
@@ -199,7 +232,7 @@ export function CharacterForger() {
       <div className="mb-6">
         <h1 className="text-xl font-bold">Character Forger</h1>
         <p className="text-sm text-muted-foreground">
-          Upload 4 reference images — xAI Grok 4.3 visualizes and compiles your character
+          Upload 1–4 reference images — xAI Grok 4.3 visualizes and compiles a deep, plot-rich character
         </p>
       </div>
 
@@ -218,7 +251,10 @@ export function CharacterForger() {
           {/* 4 image upload slots */}
           <div>
             <label className="text-sm font-medium mb-2 block">
-              4 Reference Images
+              Reference Images{" "}
+              <span className="font-normal text-muted-foreground">
+                (upload at least 1)
+              </span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               {SCENES.map((s) => {
@@ -325,7 +361,7 @@ export function CharacterForger() {
           <button
             type="button"
             onClick={handleForge}
-            disabled={forging || !concept.trim() || !allImagesReady}
+            disabled={forging || !concept.trim() || !hasAnyImage}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {forging ? (
@@ -344,8 +380,8 @@ export function CharacterForger() {
               <div className="text-center">
                 <Sparkles className="mx-auto mb-3 size-10 text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">
-                  Upload 4 reference images, enter a concept, and forge —<br />
-                  Grok 4.3 will analyze the visuals and compile a complete character card
+                  Upload 1–4 reference images, enter a concept, and forge —<br />
+                  Grok 4.3 will analyze the visuals and author a deep, plot-rich character card
                 </p>
               </div>
             </div>
@@ -449,6 +485,40 @@ export function CharacterForger() {
                     <span className="text-xs font-medium text-muted-foreground">First Message</span>
                     <div className="mt-0.5 rounded-lg bg-muted/50 p-3 italic text-xs">
                       {result.first_mes}
+                    </div>
+                  </div>
+                )}
+                {result.story_arcs && result.story_arcs.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Story Arcs ({result.story_arcs.length})
+                    </span>
+                    <div className="mt-1.5 space-y-1.5">
+                      {result.story_arcs.map((arc, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border border-border/20 bg-muted/30 p-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[11px] font-semibold">{arc.title}</p>
+                            {arc.tone && (
+                              <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">
+                                {arc.tone}
+                              </span>
+                            )}
+                          </div>
+                          {arc.summary && (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              {arc.summary}
+                            </p>
+                          )}
+                          {arc.hook && (
+                            <p className="mt-1 text-[10px] italic text-foreground/70">
+                              ↪ {arc.hook}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

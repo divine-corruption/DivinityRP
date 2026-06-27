@@ -45,6 +45,32 @@ import { MultimodalInput } from "./multimodal-input";
 
 type ActivePanel = "gallery" | "lore" | "info" | null;
 
+const LORE_CATEGORY_STYLES: Record<string, { label: string; cls: string }> = {
+  character: { label: "Character", cls: "bg-blue-500/15 text-blue-400" },
+  location: { label: "Location", cls: "bg-emerald-500/15 text-emerald-400" },
+  faction: { label: "Faction", cls: "bg-red-500/15 text-red-400" },
+  item: { label: "Item", cls: "bg-amber-500/15 text-amber-400" },
+  event: { label: "Event", cls: "bg-purple-500/15 text-purple-400" },
+  concept: { label: "Concept", cls: "bg-cyan-500/15 text-cyan-400" },
+  creature: { label: "Creature", cls: "bg-lime-500/15 text-lime-400" },
+  other: { label: "Lore", cls: "bg-primary/15 text-primary" },
+};
+
+function LoreCategoryBadge({ category }: { category?: string }) {
+  const s =
+    LORE_CATEGORY_STYLES[category ?? "other"] ?? LORE_CATEGORY_STYLES.other;
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide",
+        s.cls
+      )}
+    >
+      {s.label}
+    </span>
+  );
+}
+
 function LorePanel({
   loreEntries,
   loreBooks,
@@ -52,69 +78,119 @@ function LorePanel({
   loreEntries: import("@/lib/types").LoreEntry[];
   loreBooks: import("@/lib/types").LoreBook[];
 }) {
-  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  // "all" | "general" | <bookId>
+  const [tab, setTab] = useState<string>("all");
 
-  const filtered = selectedBookId
-    ? loreEntries.filter((e) => e.lorebookId === selectedBookId && e.approved)
-    : loreEntries.filter((e) => !e.lorebookId && e.approved);
+  const approved = loreEntries.filter((e) => e.approved);
+  const filtered =
+    tab === "all"
+      ? approved
+      : tab === "general"
+        ? approved.filter((e) => !e.lorebookId)
+        : approved.filter((e) => e.lorebookId === tab);
+
+  const bookName = (id?: string) =>
+    id ? loreBooks.find((b) => b.id === id)?.name : undefined;
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap gap-1.5 border-b border-border/20 px-3 py-2">
         <button
           type="button"
-          onClick={() => setSelectedBookId(null)}
+          onClick={() => setTab("all")}
           className={cn(
             "rounded-md px-2 py-1 text-xs transition-colors",
-            !selectedBookId
+            tab === "all"
+              ? "bg-primary/20 text-primary"
+              : "text-muted-foreground hover:bg-accent"
+          )}
+        >
+          All ({approved.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("general")}
+          className={cn(
+            "rounded-md px-2 py-1 text-xs transition-colors",
+            tab === "general"
               ? "bg-primary/20 text-primary"
               : "text-muted-foreground hover:bg-accent"
           )}
         >
           General
         </button>
-        {loreBooks.map((book) => (
-          <button
-            key={book.id}
-            type="button"
-            onClick={() => setSelectedBookId(book.id)}
-            className={cn(
-              "rounded-md px-2 py-1 text-xs transition-colors",
-              selectedBookId === book.id
-                ? "bg-primary/20 text-primary"
-                : "text-muted-foreground hover:bg-accent"
-            )}
-          >
-            {book.name}
-          </button>
-        ))}
+        {loreBooks.map((book) => {
+          const count = approved.filter((e) => e.lorebookId === book.id).length;
+          return (
+            <button
+              key={book.id}
+              type="button"
+              onClick={() => setTab(book.id)}
+              className={cn(
+                "rounded-md px-2 py-1 text-xs transition-colors",
+                tab === book.id
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:bg-accent"
+              )}
+            >
+              {book.name} ({count})
+            </button>
+          );
+        })}
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         {filtered.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No lore entries yet.</p>
+          <p className="text-xs text-muted-foreground">
+            No lore here yet. Create entries in LoreUniverse — they'll appear in
+            this chat automatically.
+          </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {filtered.map((entry) => (
               <div
                 key={entry.id}
-                className="rounded-lg border border-border/20 bg-muted/30 p-2.5"
+                className="overflow-hidden rounded-lg border border-border/20 bg-muted/30"
               >
-                <h4 className="text-xs font-medium">{entry.title}</h4>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                  {entry.content}
-                </p>
-                {entry.keys.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {entry.keys.map((k) => (
-                      <span
-                        key={k}
-                        className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary"
-                      >
-                        {k}
-                      </span>
-                    ))}
+                {entry.image && (
+                  <div className="relative aspect-[16/7] w-full overflow-hidden bg-muted">
+                    <img
+                      src={entry.image}
+                      alt={entry.title}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute left-1.5 top-1.5">
+                      <LoreCategoryBadge category={entry.category} />
+                    </div>
                   </div>
                 )}
+                <div className="p-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h4 className="text-xs font-medium">{entry.title}</h4>
+                    {!entry.image && (
+                      <LoreCategoryBadge category={entry.category} />
+                    )}
+                    {tab === "all" && bookName(entry.lorebookId) && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[8px] text-muted-foreground">
+                        {bookName(entry.lorebookId)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground whitespace-pre-wrap line-clamp-4">
+                    {entry.content}
+                  </p>
+                  {entry.keys.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {entry.keys.map((k) => (
+                        <span
+                          key={k}
+                          className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary"
+                        >
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -425,6 +501,8 @@ export function ChatShell() {
                   title: data.suggestion.title,
                   content: data.suggestion.content,
                   keys: data.suggestion.keys ?? [],
+                  category: data.suggestion.category,
+                  imagePrompt: data.suggestion.image_prompt,
                   reasoning: data.suggestion.reasoning ?? "",
                   createdAt: Date.now(),
                 },
@@ -442,11 +520,12 @@ export function ChatShell() {
     prevMessageCountRef.current = newCount;
   }, [messages, status, chatId, loreEntries, setLoreDetection]);
 
-  const characterLoreEntries = selectedCharacter
-    ? loreEntries.filter(
-        (e) => e.characterId === selectedCharacter.id && e.approved
-      )
-    : [];
+  // Lore shown in chat: this character's lore + general/world lore (no character).
+  const characterLoreEntries = loreEntries.filter(
+    (e) =>
+      e.approved &&
+      (!e.characterId || e.characterId === selectedCharacter?.id)
+  );
 
   const handleTogglePanel = (panel: ActivePanel) => {
     setActivePanel((prev) => (prev === panel ? null : panel));

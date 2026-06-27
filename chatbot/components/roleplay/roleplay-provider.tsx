@@ -338,6 +338,18 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const handleUpdateDivinitySuggestion = useCallback(
+    (id: string, patch: Partial<LoreSuggestion>) => {
+      setDivinityAIState((prev) => ({
+        ...prev,
+        suggestions: prev.suggestions.map((s) =>
+          s.id === id ? { ...s, ...patch } : s
+        ),
+      }));
+    },
+    []
+  );
+
   const handleRemoveDivinitySuggestion = useCallback((id: string) => {
     setDivinityAIState((prev) => ({
       ...prev,
@@ -388,6 +400,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       deleteLoreBook: handleDeleteLoreBook,
       setDivinityAI: handleSetDivinityAI,
       addDivinitySuggestion: handleAddDivinitySuggestion,
+      updateDivinitySuggestion: handleUpdateDivinitySuggestion,
       removeDivinitySuggestion: handleRemoveDivinitySuggestion,
       clearDivinitySuggestions: handleClearDivinitySuggestions,
       setLoreDetection: handleSetLoreDetection,
@@ -402,6 +415,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       handleAddGalleryItems, handleClearGalleryItems,
       handleAddLoreBook, handleUpdateLoreBook, handleDeleteLoreBook,
       handleSetDivinityAI, handleAddDivinitySuggestion,
+      handleUpdateDivinitySuggestion,
       handleRemoveDivinitySuggestion, handleClearDivinitySuggestions,
       handleSetLoreDetection, handleClearLoreDetection,
     ]
