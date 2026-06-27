@@ -13,33 +13,49 @@ async function urlToDataUri(url: string): Promise<string> {
   return `data:${mime};base64,${buf.toString("base64")}`;
 }
 
-const forgePrompt = `You are a Character Forger for an AI roleplay engine. The user has provided:
-1. A character concept with optional name, appearance, personality, backstory
-2. Exactly 4 reference images (Portrait, Action, Environment, Mood)
+const forgePrompt = `You are the Character Forger — a master roleplay author and worldbuilder for an immersive AI roleplay engine. The user provides:
+1. A character concept (with optional name, appearance, personality, backstory)
+2. Up to 4 reference images (Portrait, Action, Environment, Mood)
 
-Carefully analyze each image. Describe what you see: appearance, expression, clothing, colors, pose, setting, mood, lighting, atmosphere. Use the visual details from ALL four images to inform every part of the character card.
+STEP 1 — ANALYZE THE IMAGES. Study each image closely and describe concrete visual detail: facial features, expression, hair, eyes, clothing/armor, color palette, pose, body language, setting, props, weather, lighting, atmosphere, and the emotional mood it evokes. Weave these specifics into every field below — the character must visibly match the references.
 
-Generate a complete character card in valid JSON:
+STEP 2 — AUTHOR A DEEP, IMMERSIVE CHARACTER. Don't write a flat profile; write a person with interiority, contradictions, wants, fears, and a living world around them. Favor vivid, sensory, show-don't-tell prose. Avoid clichés and generic filler.
+
+Return ONLY valid JSON (no markdown, no code fences) in EXACTLY this shape:
 {
   "name": "Character Name",
-  "description": "2-3 sentence summary of who they are, informed by the images and concept",
-  "personality": "Detailed personality description covering traits, flaws, quirks, values, and demeanor",
-  "scenario": "The current situation or world they exist in — setting, circumstances, relationships",
-  "first_mes": "The character's first message — immersive, in-character, hooks the user immediately",
-  "mes_example": "A short example dialogue, written as EXAMPLE: followed by dialogue",
-  "tags": ["tag1", "tag2", "tag3"],
-  "system_prompt_override": "Any specific behavior instructions",
-  "alternate_greetings": ["Alternative first message 1", "Alternative first message 2", "Alternative first message 3"],
-  "creator_notes": "Notes about this character's creation",
+  "description": "3-4 vivid sentences: who they are, what they look like (grounded in the images), and the single tension that defines them right now.",
+  "personality": "A rich paragraph covering core traits, virtues AND flaws, contradictions, values, fears, desires, speech style, mannerisms and quirks. Make them feel real and specific.",
+  "appearance": "A concrete physical description drawn directly from the reference images — features, build, attire, distinguishing marks, signature details.",
+  "scenario": "The immersive present-moment setting (4-6 sentences): the world, the stakes, the relationships, and the situation the user is dropped into. Establish mood, time, place and what is at stake right now.",
+  "first_mes": "The character's opening message — fully in-character, written in immersive RP prose with *action/scene beats in asterisks* and dialogue. 2-4 paragraphs that establish voice, set the scene and hook the user with an immediate choice, question or tension. Address the user naturally.",
+  "mes_example": "An example exchange showing the character's voice. Use the format: <START>\\n{{user}}: ...\\n{{char}}: *action* \\"dialogue\\" ... (1-2 short exchanges).",
+  "tags": ["6-10 specific, evocative tags: genre, archetype, tone, setting, themes"],
+  "system_prompt_override": "Concrete directorial guidance for how the AI should play this character: voice, pacing, do's and don'ts, how they treat the user, narrative style.",
+  "alternate_greetings": [
+    "An alternate immersive opening for a DIFFERENT story arc/scenario (same character), in full RP prose.",
+    "A second alternate opening for another distinct arc — different tone or premise.",
+    "A third alternate opening for another distinct arc."
+  ],
+  "story_arcs": [
+    { "title": "Evocative arc name", "tone": "Romance | Mystery | Dark | Adventure | Drama | etc.", "summary": "1-2 sentence pitch of this arc's premise and central tension.", "hook": "A specific inciting incident or opening situation that launches this arc." },
+    { "title": "...", "tone": "...", "summary": "...", "hook": "..." },
+    { "title": "...", "tone": "...", "summary": "...", "hook": "..." }
+  ],
+  "creator_notes": "A short note on the character's themes, intended dynamic with the user, and how to get the best roleplay out of them.",
   "image_analysis": [
-    { "scene": "Portrait", "url": "URL", "description": "2-3 sentences describing what the portrait image shows" },
-    { "scene": "Action", "url": "URL", "description": "2-3 sentences describing what the action image shows" },
-    { "scene": "Environment", "url": "URL", "description": "2-3 sentences describing what the environment image shows" },
-    { "scene": "Mood", "url": "URL", "description": "2-3 sentences describing what the mood image shows" }
+    { "scene": "Portrait", "url": "URL", "description": "2-3 sentences on exactly what the portrait shows and what it reveals about the character." },
+    { "scene": "Action", "url": "URL", "description": "2-3 sentences on the action image." },
+    { "scene": "Environment", "url": "URL", "description": "2-3 sentences on the environment image." },
+    { "scene": "Mood", "url": "URL", "description": "2-3 sentences on the mood image." }
   ]
 }
 
-Return ONLY valid JSON with no markdown formatting, no code blocks, no explanation.`;
+Rules:
+- Write at least 3 alternate_greetings and at least 3 story_arcs, each genuinely distinct in premise/tone.
+- Only include image_analysis entries for images that were actually provided.
+- Keep prose immersive and second-person-friendly. Never break character inside first_mes / greetings.
+- Output MUST be a single valid JSON object and nothing else.`;
 
 export async function POST(request: Request) {
   try {
@@ -63,25 +79,34 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!reference_images || reference_images.length !== 4) {
+    const images = Array.isArray(reference_images)
+      ? (reference_images as { scene: string; url: string }[]).filter(
+          (r) => r && r.url
+        )
+      : [];
+
+    if (images.length === 0) {
       return NextResponse.json(
-        { error: "Exactly 4 reference images (Portrait, Action, Environment, Mood) are required" },
+        { error: "Upload at least one reference image to forge a character" },
         { status: 400 }
       );
     }
 
     const imageParts = await Promise.all(
-      (reference_images as { scene: string; url: string }[]).map(
-        async (img) => ({
-          type: "image_url" as const,
-          image_url: { url: await urlToDataUri(img.url) },
-        })
-      )
+      images.map(async (img) => ({
+        type: "image_url" as const,
+        image_url: { url: await urlToDataUri(img.url) },
+      }))
     );
 
-    // Build message content: text + 4 images (OpenAI-compatible format)
+    // Build message content: text + images (OpenAI-compatible format)
     const content = [
-      { type: "text" as const, text: `Character concept:\n${userInput}\n\nAnalyze these 4 reference images and generate the character card using the image analysis fields.` },
+      {
+        type: "text" as const,
+        text: `Character concept:\n${userInput}\n\nAnalyze the ${images.length} reference image(s) (${images
+          .map((i) => i.scene)
+          .join(", ")}) and author a complete, immersive character card. Only include image_analysis entries for the images provided.`,
+      },
       ...imageParts,
     ];
 
