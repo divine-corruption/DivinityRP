@@ -44,7 +44,10 @@ export async function deleteTrailingMessages({ id }: { id: string }) {
 
   const [message] = await getMessageById({ id });
   if (!message) {
-    throw new Error("Message not found");
+    // The target message isn't persisted (e.g. the user is editing a turn whose
+    // send was rejected before it was saved). There's nothing to trim, so treat
+    // this as a successful no-op rather than throwing an uncaught 500.
+    return;
   }
 
   const chat = await getChatById({ id: message.chatId });
