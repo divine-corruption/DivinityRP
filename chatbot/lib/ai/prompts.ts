@@ -162,7 +162,8 @@ export function buildLengthDirective(
 
   return `## RESPONSE LENGTH TARGET FOR THIS TURN (dynamic):
 - The current beat reads as ${intensity}-intensity. Aim for approximately ${target}-${upper} paragraphs this turn.
-- This is a TARGET, not a cap: never drop below the hard floor of ${LENGTH_FLOOR} paragraphs, and feel free to exceed the target when the scene clearly justifies more. Let genuine content — fresh action, sensation, dialogue, and consequence — set the true length.`;
+- TOKEN BUDGET: write a substantial reply — a HARD MINIMUM of ~1500 tokens, a PREFERRED target of ~2500 tokens, and an upper limit of ~4500 tokens. Never produce a short reply; if you find yourself finishing early, keep developing the scene with fresh action, sensation, dialogue, and consequence until you are well past the ~1500-token floor.
+- This is a TARGET, not a cap: never drop below the hard floor of ${LENGTH_FLOOR} paragraphs, and feel free to exceed the paragraph target (up to the ~4500-token ceiling) when the scene clearly justifies more. Let genuine content — not filler or repetition — set the true length.`;
 }
 
 export type RequestHints = {
