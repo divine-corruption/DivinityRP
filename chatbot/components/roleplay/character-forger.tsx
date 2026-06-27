@@ -56,8 +56,10 @@ export function CharacterForger() {
   const [result, setResult] = useState<ForgedCharacter | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const activeSceneRef = useRef<string>("");
 
   const handleGenerateSystemPrompt = async () => {
@@ -134,6 +136,39 @@ export function CharacterForger() {
     if (prev) URL.revokeObjectURL(prev.preview);
     setImages((prev) => ({ ...prev, [scene]: null }));
   };
+
+  // Upload an image specifically for this character's avatar. Goes to R2 (via
+  // /api/upload) so the avatar is durable and shared across devices.
+  const handleAvatarSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Upload failed");
+      }
+      const data = await res.json();
+      setAvatarUrl(data.url);
+      toast.success("Avatar uploaded");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to upload avatar"
+      );
+    } finally {
+      setAvatarUploading(false);
+      e.target.value = "";
+    }
+  };
+
 
   const uploadedImages = SCENES.filter((s) => {
     const img = images[s.key];
@@ -547,11 +582,32 @@ export function CharacterForger() {
                       type="url"
                       value={avatarUrl}
                     />
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={handleAvatarSelected}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={avatarUploading}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/30 bg-background px-3 py-2 text-xs font-medium transition-colors hover:bg-muted/60 disabled:opacity-50"
+                      title="Upload an image for this character's avatar"
+                    >
+                      {avatarUploading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="size-3.5" />
+                      )}
+                      {avatarUploading ? "Uploading…" : "Upload"}
+                    </button>
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     Appears next to this character's responses (with their name).
-                    Defaults to the first imported image; paste any image URL to
-                    override.
+                    Upload an image or paste any image URL. Stored in cloud
+                    storage, so it follows you across devices.
                   </p>
                 </div>
 

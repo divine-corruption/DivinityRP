@@ -143,6 +143,93 @@ export async function uploadToR2(
 }
 
 /**
+ * Download an object from R2 with a signed GET. Returns the raw bytes, or null
+ * if the object does not exist (404). Throws on other errors. Used for reading
+ * back per-user JSON state documents.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer | null> {
+  if (!isR2Configured()) {
+    throw new Error("R2 is not configured");
+  }
+
+  const { amzDate, dateStamp } = amzDates();
+  const canonicalUri = `/${R2_BUCKET}/${encodeKey(key)}`;
+  const h = host();
+  const payloadHash = "UNSIGNED-PAYLOAD";
+
+  const canonicalHeaders =
+    `host:${h}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+
+  const canonicalRequest = [
+    "GET",
+    canonicalUri,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+
+  const scope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    scope,
+    sha256Hex(canonicalRequest),
+  ].join("\n");
+
+  const signature = createHmac("sha256", signingKey(dateStamp))
+    .update(stringToSign)
+    .digest("hex");
+
+  const authorization =
+    `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${scope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const res = await fetch(`${R2_ENDPOINT}${canonicalUri}`, {
+    method: "GET",
+    headers: {
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+      Authorization: authorization,
+    },
+  });
+
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`R2 download failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  const ab = await res.arrayBuffer();
+  return Buffer.from(new Uint8Array(ab));
+}
+
+/** Store a JSON-serialisable value at `key`. */
+export async function putJsonToR2(
+  key: string,
+  value: unknown
+): Promise<R2UploadResult> {
+  const body = Buffer.from(JSON.stringify(value), "utf8");
+  return uploadToR2(key, body, "application/json");
+}
+
+/** Read and parse a JSON object stored at `key`, or null if absent/invalid. */
+export async function getJsonFromR2<T = unknown>(
+  key: string
+): Promise<T | null> {
+  const buf = await downloadFromR2(key);
+  if (!buf) return null;
+  try {
+    return JSON.parse(buf.toString("utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build a servable URL for a stored key.
  * - If R2_PUBLIC_URL is set: returns the public URL.
  * - Otherwise: returns a presigned GET URL (query-string auth).
