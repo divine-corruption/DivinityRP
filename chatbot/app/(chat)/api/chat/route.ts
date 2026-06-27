@@ -235,6 +235,12 @@ export async function POST(request: Request) {
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
           model: getLanguageModel(chatModel),
+          // Token output budget: hard ceiling of 4500 output tokens (≈ the
+          // upper bound of a long roleplay reply). The 1500-token floor and
+          // 2500-token preferred target can't be enforced by the API (there is
+          // no "minimum tokens" knob), so they're injected as guidance via the
+          // length directive in the system prompt instead.
+          maxOutputTokens: 4500,
           system: systemPrompt({
             requestHints,
             supportsTools,
