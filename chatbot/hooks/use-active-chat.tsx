@@ -23,6 +23,11 @@ import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
+import {
+  ACTIVE_THREAD_EVENT,
+  getActiveThreadId,
+  touchThread,
+} from "@/lib/conversation-threads";
 import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
@@ -62,16 +67,46 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const { mutate } = useSWRConfig();
 
   const chatIdFromUrl = extractChatId(pathname);
-  const isNewChat = !chatIdFromUrl;
+
+  // DIVINE roleplay is a single-page experience: the URL stays at `/`, so we
+  // identify the current conversation by an "active thread id" set by the
+  // roleplay layer (character/arc selection) rather than by route. This is what
+  // makes history persist per conversation and lets a new story arc be its own
+  // conversation thread. Falls back to URL routing, then a fresh ephemeral id.
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
+    getActiveThreadId()
+  );
+
+  // React to thread switches dispatched by the roleplay layer (begin arc /
+  // select character) without a route change.
+  useEffect(() => {
+    const handler = () => setActiveThreadId(getActiveThreadId());
+    window.addEventListener(ACTIVE_THREAD_EVENT, handler);
+    // Pick up a thread chosen before this provider mounted.
+    setActiveThreadId(getActiveThreadId());
+    return () => window.removeEventListener(ACTIVE_THREAD_EVENT, handler);
+  }, []);
+
   const newChatIdRef = useRef(generateUUID());
   const prevPathnameRef = useRef(pathname);
+
+  const resolvedFromUrl = chatIdFromUrl ?? activeThreadId;
+  // A thread id (from arc/character selection) or a URL chat id is a real,
+  // resumable conversation. Only when neither exists is this a throwaway chat.
+  const isNewChat = !resolvedFromUrl;
 
   if (isNewChat && prevPathnameRef.current !== pathname) {
     newChatIdRef.current = generateUUID();
   }
   prevPathnameRef.current = pathname;
 
-  const chatId = chatIdFromUrl ?? newChatIdRef.current;
+  const chatId = resolvedFromUrl ?? newChatIdRef.current;
+
+  // Keep the thread's "last opened" fresh so the sidebar/registry ordering is
+  // sensible.
+  useEffect(() => {
+    if (activeThreadId) touchThread(activeThreadId);
+  }, [activeThreadId]);
 
   const [currentModelId, setCurrentModelId] = useState(DEFAULT_CHAT_MODEL);
   const currentModelIdRef = useRef(currentModelId);
@@ -222,12 +257,23 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
+      const previousChatId = prevChatIdRef.current;
       prevChatIdRef.current = chatId;
-      if (isNewChat) {
-        setMessages([]);
+      // Switching conversation threads (or starting a new chat): clear the
+      // previous thread's messages immediately so its history never bleeds into
+      // the newly opened thread. Persisted threads are then repopulated by the
+      // load effect above once their messages arrive from the server.
+      setMessages([]);
+      // Drop the OUTGOING thread's load flag (not the incoming one) so that if
+      // the user returns to it later it re-hydrates from the DB. Deleting the
+      // INCOMING chatId here re-armed the load effect on every render and, with
+      // SWR handing back a fresh messages array each revalidation, produced a
+      // setMessages([]) <-> setMessages(data) ping-pong that froze the tab.
+      if (previousChatId && previousChatId !== chatId) {
+        loadedChatIds.current.delete(previousChatId);
       }
     }
-  }, [chatId, isNewChat, setMessages]);
+  }, [chatId, setMessages]);
 
   useEffect(() => {
     if (chatData && !isNewChat) {

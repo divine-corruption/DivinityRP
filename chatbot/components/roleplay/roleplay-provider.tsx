@@ -2,6 +2,10 @@
 
 import { nanoid } from "nanoid";
 import { useCallback, useMemo, useState } from "react";
+import {
+  ensureThread,
+  setActiveThreadId,
+} from "@/lib/conversation-threads";
 import { RoleplayCtx } from "@/lib/roleplay-store";
 import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
 
@@ -208,6 +212,30 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
           images: character.images,
         });
         localStorage.setItem("divine_active_character", charData);
+        // Open (or resume) this character's default conversation thread so its
+        // history persists and is restored when re-selected. Seed the opening
+        // message into the thread the first time it's created.
+        const { thread, created } = ensureThread({
+          characterId: character.id,
+          title: `${character.name} — Free Roleplay`,
+        });
+        setActiveThreadId(thread.id);
+        if (created && character.firstMes) {
+          fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages/seed`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chatId: thread.id,
+                title: thread.title,
+                message: { text: character.firstMes },
+              }),
+            }
+          ).catch(() => {
+            /* non-critical: opener will simply be absent on resume */
+          });
+        }
       }
     } else {
       if (typeof window !== "undefined") {

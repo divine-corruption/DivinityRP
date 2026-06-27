@@ -44,6 +44,10 @@ import {
   loadActiveArc,
   saveActiveArc,
 } from "@/lib/active-arc";
+import {
+  createArcThread,
+  setActiveThreadId,
+} from "@/lib/conversation-threads";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
@@ -1007,20 +1011,20 @@ export function ChatShell() {
                 // non-critical
               }
             }
-            // Seed the conversation with the arc's opening line.
-            if (node.firstMes) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: nanoid(),
-                  role: "assistant",
-                  parts: [{ type: "text", text: node.firstMes as string }],
-                  metadata: { createdAt: new Date().toISOString() },
-                } as ChatMessage,
-              ]);
-            }
-            // Build the active arc and persist it per-chat so the banner and the
-            // RP context survive leaving and resuming this chat.
+
+            // Beginning an arc opens a BRAND-NEW conversation thread, so its
+            // history is stored separately from the current chat. We don't
+            // splice the opener into the current messages anymore (that was
+            // unsaved and bled across conversations); instead the opener is
+            // persisted to the new thread and loaded when it opens.
+            const characterId =
+              selectedCharacter?.id ?? node.characterId ?? "unknown";
+            const thread = createArcThread({
+              characterId,
+              arcId: node.id,
+              title: node.title,
+            });
+
             const arc: ActiveArc = {
               nodeId: node.id,
               title: node.title,
@@ -1030,7 +1034,27 @@ export function ChatShell() {
               firstMes: node.firstMes,
               appliedAt: Date.now(),
             };
-            saveActiveArc(chatId, arc);
+            saveActiveArc(thread.id, arc);
+
+            if (node.firstMes) {
+              fetch(
+                `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages/seed`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    chatId: thread.id,
+                    title: node.title,
+                    message: { text: node.firstMes },
+                  }),
+                }
+              ).catch(() => {
+                /* non-critical */
+              });
+            }
+
+            // Switch the active conversation to the new arc thread.
+            setActiveThreadId(thread.id);
             setActiveArc(arc);
             setStoryPickerOpen(false);
           }}

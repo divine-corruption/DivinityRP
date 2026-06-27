@@ -18,7 +18,12 @@ import {
   DEFAULT_CHAT_MODEL,
   getCapabilities,
 } from "@/lib/ai/models";
-import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
+import {
+  buildLengthDirective,
+  computeRichnessScore,
+  type RequestHints,
+  systemPrompt,
+} from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { editDocument } from "@/lib/ai/tools/edit-document";
@@ -189,6 +194,26 @@ export async function POST(request: Request) {
 
     const modelMessages = await convertToModelMessages(uiMessages);
 
+    // Compute a dynamic, varied response-length target from how much material
+    // the most recent user turn gives the character to react to. This drives the
+    // 8-paragraph floor / 15+ typical guidance with natural turn-to-turn
+    // variation instead of a fixed length every time.
+    const lastUserText = (() => {
+      for (let i = uiMessages.length - 1; i >= 0; i--) {
+        const m = uiMessages[i];
+        if (m.role !== "user") continue;
+        return (
+          m.parts
+            ?.filter((p) => (p as { type?: string }).type === "text")
+            .map((p) => (p as { text?: string }).text ?? "")
+            .join(" ") ?? ""
+        );
+      }
+      return "";
+    })();
+    const richness = computeRichnessScore(lastUserText);
+    const lengthDirective = buildLengthDirective(richness, uiMessages.length);
+
     // Extract an optional per-character system prompt from the serialized
     // character payload so it can be injected with high priority.
     let characterSystemPrompt: string | undefined;
@@ -219,6 +244,7 @@ export async function POST(request: Request) {
             loreData,
             arcData,
             regenInstruction,
+            lengthDirective,
           }),
           messages: modelMessages,
           stopWhen: stepCountIs(5),
