@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { nanoid } from "nanoid";
+import { toast } from "sonner";
 import { useRoleplay } from "@/lib/roleplay-store";
 import { LoreNotification } from "@/components/roleplay/lore-notification";
 import { DivineVision } from "@/components/roleplay/divine-vision";
@@ -372,6 +373,56 @@ export function ChatShell() {
   const openVision = (item: MediaItem, list: MediaItem[]) => {
     setVisionList(list);
     setVisionIndex(Math.max(0, list.findIndex((m) => m.id === item.id)));
+  };
+
+  // Upload files from the Gallery panel; on success add them to the gallery
+  // drawer as "uploaded" media tied to the active character.
+  const handleGalleryUpload = async (files: File[]) => {
+    const results = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/files/upload`,
+            { method: "POST", body: formData }
+          );
+          if (!res.ok) {
+            const { error } = await res.json().catch(() => ({ error: "" }));
+            toast.error(error || `Failed to upload ${file.name}`);
+            return null;
+          }
+          const data = await res.json();
+          if (!data?.url) {
+            toast.error(`Failed to upload ${file.name}`);
+            return null;
+          }
+          const item: MediaItem = {
+            id: nanoid(),
+            url: data.url,
+            type: file.type.startsWith("video/") ? "video" : "image",
+            caption: file.name,
+            source: "uploaded",
+            characterId: selectedCharacter?.id,
+            createdAt: Date.now(),
+          };
+          return item;
+        } catch {
+          toast.error(`Failed to upload ${file.name}`);
+          return null;
+        }
+      })
+    );
+
+    const uploaded = results.filter((r): r is MediaItem => r !== null);
+    if (uploaded.length > 0) {
+      addGalleryItems(uploaded);
+      toast.success(
+        uploaded.length === 1
+          ? "Added to gallery"
+          : `Added ${uploaded.length} items to gallery`
+      );
+    }
   };
 
   const stopRef = useRef(stop);
@@ -737,6 +788,7 @@ export function ChatShell() {
                 items={galleryItems}
                 onSelect={openVision}
                 onClear={clearGalleryItems}
+                onUpload={handleGalleryUpload}
               />
             )}
 

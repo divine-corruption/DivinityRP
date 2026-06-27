@@ -6,14 +6,32 @@ import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
+// Allowed upload types: still covers chat image attachments (JPEG/PNG) and now
+// extends to the wider set the media Gallery accepts (more image formats +
+// video). Videos are larger, so the cap is raised accordingly.
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+const ALLOWED_VIDEO_TYPES = [
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+];
+const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
+const MAX_BYTES = 50 * 1024 * 1024; // 50MB to accommodate short video clips
+
 const FileSchema = z.object({
   file: z
     .instanceof(Blob)
-    .refine((file) => file.size <= 5 * 1024 * 1024, {
-      message: "File size should be less than 5MB",
+    .refine((file) => file.size <= MAX_BYTES, {
+      message: "File size should be less than 50MB",
     })
-    .refine((file) => ["image/jpeg", "image/png"].includes(file.type), {
-      message: "File type should be JPEG or PNG",
+    .refine((file) => ALLOWED_TYPES.includes(file.type), {
+      message: "File type should be an image (JPEG/PNG/WebP/GIF) or video (MP4/WebM/OGG/MOV)",
     }),
 });
 
