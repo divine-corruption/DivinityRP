@@ -80,6 +80,41 @@ export interface Character {
   metadata: Record<string, unknown>;
   importedAt: number;
   source?: "chub" | "sillytavern" | "manual";
+  /**
+   * Cross-session memory for this character. Built by compiling conversations:
+   * raw response chunks roll up into memoryBank summaries, which roll up into a
+   * single overviewMemory that is injected into the prompt so the character
+   * "remembers" across separate conversations. (Ported from the Ooda Muse brain.)
+   */
+  brain?: CharacterBrain;
+}
+
+/** A single raw response chunk awaiting summarization into the memory bank. */
+export interface CharacterMemoryChunk {
+  id: string;
+  createdAt: number;
+  content: string;
+}
+
+/** A compiled summary of a batch of response chunks (or a whole session). */
+export interface CharacterMemorySummary {
+  id: string;
+  createdAt: number;
+  content: string;
+  /** How many raw chunks/responses this summary was distilled from. */
+  sourceCount: number;
+}
+
+/**
+ * Per-character persistent memory. recentResponses accumulate until a threshold
+ * is hit, then distill into memoryBank summaries; once enough summaries exist
+ * they distill into a single overviewMemory injected into every prompt.
+ */
+export interface CharacterBrain {
+  recentResponses: CharacterMemoryChunk[];
+  memoryBank: CharacterMemorySummary[];
+  overviewMemory?: string;
+  updatedAt: number;
 }
 
 export interface LoreBook {
@@ -109,6 +144,8 @@ export interface LoreEntry {
   characterId?: string;
   lorebookId?: string;
   category?: LoreCategory;
+  /** Relevance/priority 1-10. Higher = injected first and survives threshold filtering. Default 5. */
+  importance?: number;
   /** Generated cover image URL for visual lore cards. */
   image?: string;
   /** Prompt used (or to be used) to generate the cover image. */
@@ -189,4 +226,5 @@ export type SidebarView =
   | "characters"
   | "loreuniverse"
   | "divinecorruption"
+  | "modeltester"
   | "settings";

@@ -3,6 +3,7 @@
 import {
   BookOpen,
   Compass,
+  FlaskConical,
   Home,
   Settings,
   Skull,
@@ -33,6 +34,7 @@ const navItems: { id: SidebarView; label: string; icon: React.ElementType }[] = 
   { id: "characters", label: "Characters", icon: Users },
   { id: "loreuniverse", label: "LoreUniverse", icon: BookOpen },
   { id: "divinecorruption", label: "Divine Corruption", icon: Skull },
+  { id: "modeltester", label: "Model Tester", icon: FlaskConical },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

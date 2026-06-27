@@ -32,6 +32,10 @@ export interface ConversationThread {
   title: string;
   createdAt: number;
   lastOpenedAt: number;
+  /** Set when the conversation has been closed & compiled into character memory. */
+  isClosed?: boolean;
+  /** Timestamp of the last compile-to-memory for this thread. */
+  compiledAt?: number;
 }
 
 const REGISTRY_KEY = "divine_conversation_threads";
@@ -180,6 +184,17 @@ export function renameThread(id: string, title: string): void {
   const t = threads.find((x) => x.id === id);
   if (t) {
     t.title = title.trim() || t.title;
+    writeRegistry(threads);
+  }
+}
+
+/** Mark a thread closed & compiled (its history was folded into the brain). */
+export function markThreadCompiled(id: string): void {
+  const threads = readRegistry();
+  const t = threads.find((x) => x.id === id);
+  if (t) {
+    t.isClosed = true;
+    t.compiledAt = Date.now();
     writeRegistry(threads);
   }
 }

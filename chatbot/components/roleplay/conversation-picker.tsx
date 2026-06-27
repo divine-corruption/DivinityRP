@@ -200,6 +200,11 @@ export function ConversationPicker({
                               Active
                             </span>
                           )}
+                          {t.isClosed && (
+                            <span className="ml-2 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-400">
+                              Compiled
+                            </span>
+                          )}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                           Last opened {timeAgo(t.lastOpenedAt)}
