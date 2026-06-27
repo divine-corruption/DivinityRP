@@ -27,6 +27,7 @@ export const imagineImage = tool({
   }),
   execute: async ({ prompt, negative_prompt, aspect_ratio, style }) => {
     const apiKey =
+      process.env.XAI_API_KEY ||
       process.env.IMAGINE_API_KEY ||
       (typeof window !== "undefined"
         ? localStorage.getItem("imagine_api_key")
@@ -35,7 +36,7 @@ export const imagineImage = tool({
     if (!apiKey) {
       return {
         error:
-          "Imagine API key not configured. Add it in Settings or set IMAGINE_API_KEY env var.",
+          "No image provider configured. Set XAI_API_KEY (Grok Imagine) or IMAGINE_API_KEY.",
       };
     }
 
