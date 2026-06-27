@@ -89,6 +89,7 @@ export async function POST(request: Request) {
       system: forgePrompt,
       messages: [{ role: "user", content }],
       maxTokens: 8192,
+      responseFormat: { type: "json_object" },
     });
 
     const jsonStart = text.indexOf("{");
@@ -98,17 +99,29 @@ export async function POST(request: Request) {
         ? text.slice(jsonStart, jsonEnd + 1)
         : text;
 
-    const parsed = JSON.parse(jsonStr);
-
-    if (parsed.image_analysis && reference_images) {
-      parsed.image_analysis = parsed.image_analysis.map(
-        (ia: { scene: string; url: string; description: string }) => {
-          const match = (reference_images as { scene: string; url: string }[]).find(
-            (r) => r.scene === ia.scene
-          );
-          return { ...ia, url: match?.url ?? ia.url ?? "" };
-        }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Grok returned a malformed character card. Please try forging again.",
+        },
+        { status: 502 }
       );
+    }
+
+    const imageAnalysis = parsed.image_analysis;
+    if (Array.isArray(imageAnalysis) && reference_images) {
+      parsed.image_analysis = (
+        imageAnalysis as { scene: string; url: string; description: string }[]
+      ).map((ia) => {
+        const match = (reference_images as { scene: string; url: string }[]).find(
+          (r) => r.scene === ia.scene
+        );
+        return { ...ia, url: match?.url ?? ia.url ?? "" };
+      });
     }
 
     return NextResponse.json(parsed);

@@ -133,7 +133,30 @@ export interface StoryNode {
   characterId: string;
   title: string;
   summary: string;
+  /** Scenario/opening text applied when this arc is chosen. Overrides the character scenario. */
+  scenario?: string;
+  /** Optional alternate opening message for this arc. */
+  firstMes?: string;
+  /** Optional cover art for the arc card. */
+  cover?: string;
+  /** Narrative tone, e.g. "Romance", "Mystery", "Dark". */
+  tone?: string;
+  /** Marks built-in/suggested arcs vs. user-saved checkpoints. */
+  kind?: "arc" | "checkpoint";
   chatId: string;
+  createdAt: number;
+}
+
+export type MediaType = "image" | "video";
+
+export interface MediaItem {
+  id: string;
+  url: string;
+  type: MediaType;
+  caption?: string;
+  /** Origin of the media so the gallery can group/filter it. */
+  source: "character" | "generated" | "uploaded" | "forge";
+  characterId?: string;
   createdAt: number;
 }
 

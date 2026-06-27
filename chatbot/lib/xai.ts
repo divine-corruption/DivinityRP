@@ -14,9 +14,20 @@ interface XAIChatOptions {
   system?: string;
   messages: XAIChatMessage[];
   maxTokens?: number;
+  /** Optional OpenAI-compatible response_format (e.g. { type: "json_object" }). */
+  responseFormat?: { type: "json_object" | "text" };
 }
 
+/** Default xAI model used for vision + reasoning (Grok 4.3 is multimodal). */
+export const XAI_DEFAULT_MODEL = "grok-4.3";
+
 export async function xaiChat(options: XAIChatOptions): Promise<string> {
+  if (!XAI_API_KEY) {
+    throw new Error(
+      "XAI_API_KEY is not configured. Add it to your environment (.env.local) to use the Character Forger and xAI features."
+    );
+  }
+
   const messages: Record<string, unknown>[] = [];
 
   if (options.system) {
@@ -37,6 +48,9 @@ export async function xaiChat(options: XAIChatOptions): Promise<string> {
       model: options.model ?? "grok-4.3",
       messages,
       max_tokens: options.maxTokens ?? 4096,
+      ...(options.responseFormat
+        ? { response_format: options.responseFormat }
+        : {}),
     }),
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, SidebarView, StoryNode } from "./types";
+import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "./types";
 
 export interface RoleplayState {
   characters: Character[];
@@ -11,6 +11,8 @@ export interface RoleplayState {
   storyNodes: StoryNode[];
   currentView: SidebarView;
   galleryMedia: { url: string; type: "image" | "video" } | null;
+  /** Aggregated media collected across the session for the Gallery System. */
+  galleryItems: MediaItem[];
   divinityAI: DivinityAIState;
   loreDetection: LoreDetection;
 }
@@ -24,7 +26,12 @@ export interface RoleplayActions {
   updateLoreEntry: (id: string, entry: Partial<LoreEntry>) => void;
   deleteLoreEntry: (id: string) => void;
   addStoryNode: (node: StoryNode) => void;
+  updateStoryNode: (id: string, node: Partial<StoryNode>) => void;
+  deleteStoryNode: (id: string) => void;
   setGalleryMedia: (media: { url: string; type: "image" | "video" } | null) => void;
+  /** Add media to the aggregated gallery (de-duplicated by url). */
+  addGalleryItems: (items: MediaItem[]) => void;
+  clearGalleryItems: () => void;
   // LoreBooks
   addLoreBook: (book: LoreBook) => void;
   updateLoreBook: (id: string, book: Partial<LoreBook>) => void;

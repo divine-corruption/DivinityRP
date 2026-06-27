@@ -1,11 +1,12 @@
 "use client";
 
-import { Hammer, ImageIcon, Info, Plus, Trash2, Upload } from "lucide-react";
+import { BookMarked, Hammer, Loader2, Play, Sparkles, Trash2, Upload } from "lucide-react";
 import { CharacterForger } from "./character-forger";
-import { useCallback, useRef, useState } from "react";
+import { nanoid } from "nanoid";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRoleplay } from "@/lib/roleplay-store";
-import type { Character } from "@/lib/types";
+import type { Character, StoryNode } from "@/lib/types";
 
 function CharacterCard({
   character,
@@ -180,7 +181,93 @@ function CharacterDetailView({
   character: Character;
   onBack: () => void;
 }) {
-  const { setCurrentView } = useRoleplay();
+  const { selectCharacter, setCurrentView, storyNodes, addStoryNode, deleteStoryNode } =
+    useRoleplay();
+  const [generatingArcs, setGeneratingArcs] = useState(false);
+
+  const arcs = useMemo(
+    () =>
+      storyNodes
+        .filter((n) => n.characterId === character.id)
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [storyNodes, character.id]
+  );
+
+  const generateArcs = async () => {
+    setGeneratingArcs(true);
+    try {
+      const res = await fetch("/api/story-arcs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          character: {
+            name: character.name,
+            description: character.description,
+            personality: character.personality,
+            scenario: character.scenario,
+            tags: character.tags,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to generate arcs");
+      }
+      const data = await res.json();
+      const generated: {
+        title: string;
+        tone?: string;
+        summary?: string;
+        scenario?: string;
+        first_mes?: string;
+      }[] = data.arcs ?? [];
+      if (generated.length === 0) {
+        toast.error("Grok returned no arcs");
+        return;
+      }
+      for (const a of generated) {
+        addStoryNode({
+          id: nanoid(),
+          characterId: character.id,
+          title: a.title,
+          tone: a.tone,
+          summary: a.summary ?? "",
+          scenario: a.scenario,
+          firstMes: a.first_mes,
+          kind: "arc",
+          chatId: "",
+          createdAt: Date.now(),
+        });
+      }
+      toast.success(`Grok forged ${generated.length} story arcs`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate");
+    } finally {
+      setGeneratingArcs(false);
+    }
+  };
+
+  const beginArc = (node: StoryNode) => {
+    // Apply the arc scenario to the character and open the chat.
+    if (typeof window !== "undefined") {
+      const charData = JSON.stringify({
+        name: character.name,
+        description: character.description,
+        personality: character.personality,
+        scenario: node.scenario || character.scenario,
+        first_mes: node.firstMes || character.firstMes,
+        mes_example: character.mesExample,
+        tags: character.tags,
+        avatar: character.avatar,
+        images: character.images,
+        active_arc: node.title,
+      });
+      localStorage.setItem("divine_active_character", charData);
+    }
+    selectCharacter(character);
+    setCurrentView("characters");
+    toast.success(`Starting arc: ${node.title}`);
+  };
 
   return (
     <div className="flex h-full flex-col p-6 overflow-y-auto">
@@ -227,13 +314,85 @@ function CharacterDetailView({
       <div className="mb-4 flex gap-2">
         <button
           type="button"
-          onClick={() => setCurrentView("characters")}
+          onClick={() => selectCharacter(character)}
           className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
         >
-          <Plus className="size-4" />
-          New Story Node
+          <Play className="size-4" />
+          Start Roleplay
+        </button>
+        <button
+          type="button"
+          onClick={generateArcs}
+          disabled={generatingArcs}
+          className="inline-flex items-center gap-2 rounded-lg border border-border/30 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+        >
+          {generatingArcs ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          {generatingArcs ? "Forging arcs…" : "Generate Story Arcs"}
         </button>
       </div>
+
+      {/* Story Arcs (Character Story Nodes) */}
+      <section className="mb-6">
+        <div className="mb-2 flex items-center gap-2">
+          <BookMarked className="size-4 text-primary" />
+          <h2 className="text-sm font-medium">
+            Story Arcs ({arcs.length})
+          </h2>
+        </div>
+        {arcs.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/30 p-5 text-center">
+            <p className="text-xs text-muted-foreground">
+              No story arcs yet. Generate distinct scenarios with Grok, then
+              pick one to begin.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {arcs.map((node) => (
+              <div
+                key={node.id}
+                className="group relative flex flex-col rounded-xl border border-border/30 bg-card p-3 transition-colors hover:border-primary/40"
+              >
+                <div className="mb-1.5 flex items-start justify-between gap-2">
+                  <h3 className="text-sm font-semibold leading-tight">
+                    {node.title}
+                  </h3>
+                  {node.tone && (
+                    <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">
+                      {node.tone}
+                    </span>
+                  )}
+                </div>
+                <p className="mb-3 line-clamp-3 flex-1 text-[11px] leading-relaxed text-muted-foreground">
+                  {node.summary || node.scenario || "No description"}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => beginArc(node)}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    <Play className="size-3" />
+                    Begin Arc
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteStoryNode(node.id)}
+                    className="rounded-lg p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                    title="Delete arc"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="space-y-4">
         <section>

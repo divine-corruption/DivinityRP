@@ -15,6 +15,9 @@ import { useEffect, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import { useRoleplay } from "@/lib/roleplay-store";
 import { LoreNotification } from "@/components/roleplay/lore-notification";
+import { DivineVision } from "@/components/roleplay/divine-vision";
+import { MediaGallery } from "@/components/roleplay/media-gallery";
+import { StoryNodePicker } from "@/components/roleplay/story-node-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +34,7 @@ import {
   useArtifact,
   useArtifactSelector,
 } from "@/hooks/use-artifact";
-import type { Attachment, ChatMessage } from "@/lib/types";
+import type { Attachment, ChatMessage, MediaItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
@@ -41,44 +44,6 @@ import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
 
 type ActivePanel = "gallery" | "lore" | "info" | null;
-
-function FloatingViewer({
-  url,
-  type,
-  onClose,
-}: {
-  url: string;
-  type: "image" | "video";
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="relative max-h-[90vh] max-w-[90vw]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute -right-3 -top-3 z-10 rounded-full bg-background p-1.5 shadow-lg transition-colors hover:bg-accent"
-        >
-          <X className="size-4" />
-        </button>
-        {type === "video" ? (
-          <video
-            src={url}
-            controls
-            autoPlay
-            className="max-h-[85vh] max-w-[85vw] rounded-lg"
-          />
-        ) : (
-          <img
-            src={url}
-            alt="Gallery media"
-            className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain"
-          />
-        )}
-      </div>
-    </div>
-  );
-}
 
 function LorePanel({
   loreEntries,
@@ -310,6 +275,9 @@ export function ChatShell() {
     setLoreDetection,
     loreEntries,
     loreBooks,
+    galleryItems,
+    addGalleryItems,
+    clearGalleryItems,
   } = useRoleplay();
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
@@ -320,11 +288,15 @@ export function ChatShell() {
   const { setArtifact } = useArtifact();
 
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [floatingViewer, setFloatingViewer] = useState<{
-    url: string;
-    type: "image" | "video";
-  } | null>(null);
+  const [visionList, setVisionList] = useState<MediaItem[] | null>(null);
+  const [visionIndex, setVisionIndex] = useState(0);
+  const [storyPickerOpen, setStoryPickerOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+
+  const openVision = (item: MediaItem, list: MediaItem[]) => {
+    setVisionList(list);
+    setVisionIndex(Math.max(0, list.findIndex((m) => m.id === item.id)));
+  };
 
   const stopRef = useRef(stop);
   stopRef.current = stop;
@@ -338,10 +310,80 @@ export function ChatShell() {
       setEditingMessage(null);
       setAttachments([]);
       setActivePanel(null);
-      setFloatingViewer(null);
+      setVisionList(null);
+      setStoryPickerOpen(false);
     }
   }, [chatId, setArtifact]);
   const prevMessageCountRef = useRef(messages.length);
+
+  // Aggregate media (character art + AI-generated images) into the Gallery.
+  useEffect(() => {
+    const collected: MediaItem[] = [];
+
+    if (selectedCharacter) {
+      for (const img of selectedCharacter.images ?? []) {
+        if (!img.url) continue;
+        const isVideo = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(img.url);
+        collected.push({
+          id: `char-${selectedCharacter.id}-${img.url}`,
+          url: img.url,
+          type: isVideo ? "video" : "image",
+          caption: img.caption,
+          source: "character",
+          characterId: selectedCharacter.id,
+          createdAt: selectedCharacter.importedAt,
+        });
+      }
+    }
+
+    for (const m of messages) {
+      for (const part of m.parts ?? []) {
+        // AI-generated images from the imagineImage tool.
+        if (
+          part.type === "tool-imagineImage" &&
+          "output" in part &&
+          part.output &&
+          typeof part.output === "object" &&
+          "url" in part.output &&
+          typeof (part.output as { url?: unknown }).url === "string"
+        ) {
+          const out = part.output as { url: string; prompt?: string };
+          collected.push({
+            id: `gen-${m.id}-${out.url}`,
+            url: out.url,
+            type: "image",
+            caption: out.prompt,
+            source: "generated",
+            characterId: selectedCharacter?.id,
+            createdAt: Date.now(),
+          });
+        }
+        // User-attached files (images / videos).
+        if (
+          part.type === "file" &&
+          "url" in part &&
+          typeof part.url === "string"
+        ) {
+          const mediaType = "mediaType" in part ? String(part.mediaType) : "";
+          const isImg = mediaType.startsWith("image");
+          const isVid = mediaType.startsWith("video");
+          if (isImg || isVid) {
+            collected.push({
+              id: `att-${m.id}-${part.url}`,
+              url: part.url,
+              type: isVid ? "video" : "image",
+              caption: "name" in part ? String(part.name) : undefined,
+              source: "uploaded",
+              characterId: selectedCharacter?.id,
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
+    }
+
+    if (collected.length > 0) addGalleryItems(collected);
+  }, [messages, selectedCharacter, addGalleryItems]);
 
   useEffect(() => {
     const newCount = messages.length;
@@ -441,21 +483,24 @@ export function ChatShell() {
                 </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {selectedCharacter.images && selectedCharacter.images.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleTogglePanel("gallery")}
-                    className={cn(
-                      "rounded-lg p-2 transition-colors hover:bg-accent",
-                      activePanel === "gallery"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground/60 hover:text-foreground"
-                    )}
-                    title="Gallery"
-                  >
-                    <Image className="size-4" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleTogglePanel("gallery")}
+                  className={cn(
+                    "relative rounded-lg p-2 transition-colors hover:bg-accent",
+                    activePanel === "gallery"
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground/60 hover:text-foreground"
+                  )}
+                  title="Gallery"
+                >
+                  <Image className="size-4" />
+                  {galleryItems.length > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-bold text-primary-foreground">
+                      {galleryItems.length > 99 ? "99+" : galleryItems.length}
+                    </span>
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleTogglePanel("lore")}
@@ -484,8 +529,9 @@ export function ChatShell() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStoryPickerOpen(true)}
                   className="rounded-lg p-2 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                  title="New Story Node"
+                  title="Story Arcs"
                 >
                   <Plus className="size-4" />
                 </button>
@@ -597,7 +643,7 @@ export function ChatShell() {
                   type="button"
                   onClick={() => {
                     setActivePanel(null);
-                    setFloatingViewer(null);
+                    setVisionList(null);
                   }}
                   className="rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:text-foreground"
                   title="Close"
@@ -607,46 +653,12 @@ export function ChatShell() {
               </div>
             </div>
 
-            {activePanel === "gallery" && selectedCharacter && (
-              <div className="flex flex-1 flex-col overflow-hidden">
-                <div className="grid grid-cols-2 gap-2 overflow-y-auto p-3">
-                  {selectedCharacter.images.map((img, i) => {
-                    const isVideo =
-                      img.url.match(/\.(mp4|webm|ogg|mov|gif)$/i) !== null;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() =>
-                          setFloatingViewer({
-                            url: img.url,
-                            type: isVideo ? "video" : "image",
-                          })
-                        }
-                        className="group relative aspect-square overflow-hidden rounded-lg border border-border/20 transition-transform hover:scale-[1.02]"
-                      >
-                        <img
-                          src={img.url}
-                          alt={img.caption ?? `Media ${i + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-                        {isVideo && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <span className="text-2xl text-white">▶</span>
-                          </div>
-                        )}
-                        {img.caption && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                            <span className="text-[10px] text-white">
-                              {img.caption}
-                            </span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            {activePanel === "gallery" && (
+              <MediaGallery
+                items={galleryItems}
+                onSelect={openVision}
+                onClear={clearGalleryItems}
+              />
             )}
 
             {activePanel === "lore" && selectedCharacter && (
@@ -685,11 +697,59 @@ export function ChatShell() {
         />
       </div>
 
-      {floatingViewer && (
-        <FloatingViewer
-          url={floatingViewer.url}
-          type={floatingViewer.type}
-          onClose={() => setFloatingViewer(null)}
+      {visionList && visionList[visionIndex] && (
+        <DivineVision
+          media={{
+            url: visionList[visionIndex].url,
+            type: visionList[visionIndex].type,
+            caption: visionList[visionIndex].caption,
+          }}
+          playlist={visionList}
+          index={visionIndex}
+          onNavigate={(i) => setVisionIndex(i)}
+          onClose={() => setVisionList(null)}
+        />
+      )}
+
+      {storyPickerOpen && selectedCharacter && (
+        <StoryNodePicker
+          character={selectedCharacter}
+          chatId={chatId}
+          onApplyArc={(node) => {
+            // Persist the chosen arc's scenario onto the active character so the
+            // chat API picks it up on the next message.
+            if (typeof window !== "undefined") {
+              try {
+                const raw = localStorage.getItem("divine_active_character");
+                const base = raw ? JSON.parse(raw) : {};
+                localStorage.setItem(
+                  "divine_active_character",
+                  JSON.stringify({
+                    ...base,
+                    scenario: node.scenario || base.scenario,
+                    first_mes: node.firstMes || base.first_mes,
+                    active_arc: node.title,
+                  })
+                );
+              } catch {
+                // non-critical
+              }
+            }
+            // Seed the conversation with the arc's opening line.
+            if (node.firstMes) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: nanoid(),
+                  role: "assistant",
+                  parts: [{ type: "text", text: node.firstMes as string }],
+                  metadata: { createdAt: new Date().toISOString() },
+                } as ChatMessage,
+              ]);
+            }
+            setStoryPickerOpen(false);
+          }}
+          onClose={() => setStoryPickerOpen(false)}
         />
       )}
 
