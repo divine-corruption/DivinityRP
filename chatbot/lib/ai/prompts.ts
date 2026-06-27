@@ -117,11 +117,43 @@ export function computeRichnessScore(recentText: string): number {
 
   // Action / sensory / escalation cues → higher-stimulus beat.
   const cueWords = [
-    "kiss", "touch", "grab", "pull", "push", "moan", "thrust", "grind",
-    "fight", "run", "scream", "blood", "magic", "spell", "corrupt",
-    "whisper", "breath", "skin", "thigh", "chest", "hip", "lips", "tongue",
-    "slam", "tear", "strip", "bare", "writhe", "shiver", "gasp", "climax",
-    "danger", "attack", "betray", "reveal", "confess", "secret",
+    "kiss",
+    "touch",
+    "grab",
+    "pull",
+    "push",
+    "moan",
+    "thrust",
+    "grind",
+    "fight",
+    "run",
+    "scream",
+    "blood",
+    "magic",
+    "spell",
+    "corrupt",
+    "whisper",
+    "breath",
+    "skin",
+    "thigh",
+    "chest",
+    "hip",
+    "lips",
+    "tongue",
+    "slam",
+    "tear",
+    "strip",
+    "bare",
+    "writhe",
+    "shiver",
+    "gasp",
+    "climax",
+    "danger",
+    "attack",
+    "betray",
+    "reveal",
+    "confess",
+    "secret",
   ];
   let cueHits = 0;
   for (const w of cueWords) if (text.includes(w)) cueHits++;
@@ -145,14 +177,11 @@ export function computeRichnessScore(recentText: string): number {
  * message count) keeps the jitter deterministic-ish per turn while still
  * varying turn-to-turn.
  */
-export function buildLengthDirective(
-  richness: number,
-  seed = 0
-): string {
+export function buildLengthDirective(richness: number, seed = 0): string {
   // Base target scales from LENGTH_BASE upward with richness.
   const scaled = LENGTH_BASE + richness * (LENGTH_CEIL - LENGTH_BASE);
   // Bounded jitter (±2) so consecutive replies vary naturally.
-  const jitter = ((Math.sin(seed * 12.9898) * 43758.5453) % 1) * 4 - 2;
+  const jitter = ((Math.sin(seed * 12.9898) * 43_758.5453) % 1) * 4 - 2;
   let target = Math.round(scaled + jitter);
   target = Math.max(LENGTH_FLOOR + 2, Math.min(LENGTH_CEIL, target));
   const upper = Math.min(LENGTH_CEIL + 4, target + 4);
@@ -181,19 +210,7 @@ About the origin of user's request:
 - country: ${requestHints.country}
 `;
 
-export const systemPrompt = ({
-  requestHints,
-  supportsTools,
-  character,
-  customPrompt,
-  characterSystemPrompt,
-  globalSystemPrompt,
-  memoryData,
-  loreData,
-  arcData,
-  regenInstruction,
-  lengthDirective,
-}: {
+export type SystemPromptArgs = {
   requestHints: RequestHints;
   supportsTools: boolean;
   character?: string;
@@ -205,92 +222,203 @@ export const systemPrompt = ({
   arcData?: string;
   regenInstruction?: string;
   lengthDirective?: string;
-}) => {
-  const requestPrompt = getRequestPromptFromHints(requestHints);
-  const characterPrompt = character
-    ? `\n\n## Character Definition — You are this character. Embody them completely:\n\n${character}`
-    : "";
-
-  const charSystemPrompt = characterSystemPrompt
-    ? `\n\n## Character Directives — HIGHEST PRIORITY behavioral instructions for playing this specific character. Follow these above all else:\n\n${characterSystemPrompt}`
-    : "";
-
-  const globalPrompt = globalSystemPrompt?.trim()
-    ? `\n\n## Global Directives — Universal rules that apply to every conversation in this engine:\n\n${globalSystemPrompt.trim()}`
-    : "";
-
-  const memoryPrompt = memoryData?.trim()
-    ? `\n\n## Character Memory — This is what you (the character) remember from PAST conversations with the user. Treat it as established history you genuinely recall. Reference it naturally when relevant; never contradict it or claim you don't remember it:\n\n${memoryData.trim()}`
-    : "";
-
-  const userPrompt = customPrompt
-    ? `\n\n## User's Custom Instructions:\n\n${customPrompt}`
-    : "";
-
-  let loreText = "";
-  if (loreData) {
-    try {
-      const entries = JSON.parse(loreData) as {
-        title: string;
-        content: string;
-        keys?: string[];
-        importance?: number;
-      }[];
-      if (Array.isArray(entries) && entries.length > 0) {
-        loreText = entries
-          .map(
-            (e, i) =>
-              `${i + 1}. ${e.title}${typeof e.importance === "number" ? ` (priority ${e.importance})` : ""}${e.keys?.length ? ` [Keywords: ${e.keys.join(", ")}]` : ""}\n${e.content}`
-          )
-          .join("\n\n");
-      }
-    } catch {
-      loreText = loreData;
-    }
-  }
-
-  const lorePrompt = loreText
-    ? `\n\n## World Lore Context — This is the established lore of the world. You must remember and reference it naturally in your responses. Do not contradict it. If the user's actions would affect this lore, acknowledge and evolve it organically:\n\n${loreText}`
-    : "";
-
-  let arcText = "";
-  if (arcData) {
-    try {
-      const arc = JSON.parse(arcData) as {
-        title?: string;
-        tone?: string;
-        summary?: string;
-        scenario?: string;
-      };
-      const parts: string[] = [];
-      if (arc.title) parts.push(`Title: ${arc.title}`);
-      if (arc.tone) parts.push(`Tone: ${arc.tone}`);
-      if (arc.summary) parts.push(`Premise: ${arc.summary}`);
-      if (arc.scenario) parts.push(`Scenario: ${arc.scenario}`);
-      arcText = parts.join("\n");
-    } catch {
-      arcText = arcData;
-    }
-  }
-
-  const arcPrompt = arcText
-    ? `\n\n## ACTIVE STORY ARC — This is the scenario the user is currently roleplaying through. It takes precedence over the character's default scenario. Stay within this arc's setting, tone and premise. Drive the story along this arc; do not silently abandon it or reset to a different scenario:\n\n${arcText}`
-    : "";
-
-  const regenPrompt = regenInstruction?.trim()
-    ? `\n\n## REGENERATION DIRECTIVE — The user is asking you to redo your previous response with this specific guidance. Apply it faithfully while keeping all other rules (mandatory dialogue, length, MLA, in-character) intact:\n\n${regenInstruction.trim()}`
-    : "";
-
-  const lengthPrompt = lengthDirective?.trim()
-    ? `\n\n${lengthDirective.trim()}`
-    : "";
-
-  if (!supportsTools) {
-    return `${regularPrompt}${globalPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${memoryPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}`;
-  }
-
-  return `${regularPrompt}${globalPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${memoryPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}\n\n${artifactsPrompt}`;
 };
+
+/* ----------------------------------------------------------------------------
+ * Layered prompt manager (GAP D, ported in concept from Ooda Muse's
+ * promptLayerManager).
+ *
+ * The system prompt used to be assembled by interpolating ~10 optional string
+ * fragments inline into one big template literal, where the ORDER lived buried
+ * in that literal and was easy to get wrong when adding a new section. We now
+ * model the prompt as an explicit, ordered list of named `PromptLayer`s. Each
+ * layer knows its own id, priority, and rendered content; `assembleLayers`
+ * drops empty layers and joins the rest. This makes the ordering data, not
+ * syntax — new sections slot in by priority instead of by careful placement in
+ * a string.
+ *
+ * IMPORTANT: this is a pure refactor. The emitted prompt string is byte-for-byte
+ * identical to the previous concatenation (same fragments, same `\n\n`
+ * separators, same order), so live model behavior is unchanged.
+ * ------------------------------------------------------------------------- */
+
+/** One ordered section of the assembled system prompt. */
+export type PromptLayer = {
+  /** Stable identifier for debugging / future per-layer tuning. */
+  id: string;
+  /** Lower number = earlier in the final prompt. */
+  priority: number;
+  /**
+   * Rendered content for this layer, already including any leading separator
+   * it needs (most optional layers carry their own leading "\n\n"). Empty
+   * string means the layer is inactive and is dropped during assembly.
+   */
+  content: string;
+};
+
+/** Serialize lore JSON into the human-readable block injected into the prompt. */
+function renderLoreText(loreData?: string): string {
+  if (!loreData) return "";
+  try {
+    const entries = JSON.parse(loreData) as {
+      title: string;
+      content: string;
+      keys?: string[];
+      importance?: number;
+    }[];
+    if (Array.isArray(entries) && entries.length > 0) {
+      return entries
+        .map(
+          (e, i) =>
+            `${i + 1}. ${e.title}${typeof e.importance === "number" ? ` (priority ${e.importance})` : ""}${e.keys?.length ? ` [Keywords: ${e.keys.join(", ")}]` : ""}\n${e.content}`
+        )
+        .join("\n\n");
+    }
+    return "";
+  } catch {
+    return loreData;
+  }
+}
+
+/** Serialize story-arc JSON into the block injected into the prompt. */
+function renderArcText(arcData?: string): string {
+  if (!arcData) return "";
+  try {
+    const arc = JSON.parse(arcData) as {
+      title?: string;
+      tone?: string;
+      summary?: string;
+      scenario?: string;
+    };
+    const parts: string[] = [];
+    if (arc.title) parts.push(`Title: ${arc.title}`);
+    if (arc.tone) parts.push(`Tone: ${arc.tone}`);
+    if (arc.summary) parts.push(`Premise: ${arc.summary}`);
+    if (arc.scenario) parts.push(`Scenario: ${arc.scenario}`);
+    return parts.join("\n");
+  } catch {
+    return arcData;
+  }
+}
+
+/**
+ * Build the ordered list of prompt layers from the request args. Exported so the
+ * exact prompt composition can be inspected/tested (e.g. the Model Tester) and
+ * extended by adding a layer rather than editing a template literal.
+ *
+ * Priority ordering mirrors the previous fixed concatenation exactly:
+ *   base → global → request → character → char-directives → memory →
+ *   user-custom → lore → arc → regen → length → (artifacts, tools only)
+ */
+export function buildPromptLayers(args: SystemPromptArgs): PromptLayer[] {
+  const {
+    requestHints,
+    supportsTools,
+    character,
+    customPrompt,
+    characterSystemPrompt,
+    globalSystemPrompt,
+    memoryData,
+    loreData,
+    arcData,
+    regenInstruction,
+    lengthDirective,
+  } = args;
+
+  const loreText = renderLoreText(loreData);
+  const arcText = renderArcText(arcData);
+
+  const layers: PromptLayer[] = [
+    // The base engine prompt is the only layer with no leading separator.
+    { id: "base", priority: 0, content: regularPrompt },
+    {
+      id: "global",
+      priority: 10,
+      content: globalSystemPrompt?.trim()
+        ? `\n\n## Global Directives — Universal rules that apply to every conversation in this engine:\n\n${globalSystemPrompt.trim()}`
+        : "",
+    },
+    // The request-hints layer carries the fixed "\n\n" that previously sat
+    // between globalPrompt and requestPrompt in the template literal.
+    {
+      id: "request",
+      priority: 20,
+      content: `\n\n${getRequestPromptFromHints(requestHints)}`,
+    },
+    {
+      id: "character",
+      priority: 30,
+      content: character
+        ? `\n\n## Character Definition — You are this character. Embody them completely:\n\n${character}`
+        : "",
+    },
+    {
+      id: "character-directives",
+      priority: 40,
+      content: characterSystemPrompt
+        ? `\n\n## Character Directives — HIGHEST PRIORITY behavioral instructions for playing this specific character. Follow these above all else:\n\n${characterSystemPrompt}`
+        : "",
+    },
+    {
+      id: "memory",
+      priority: 50,
+      content: memoryData?.trim()
+        ? `\n\n## Character Memory — This is what you (the character) remember from PAST conversations with the user. Treat it as established history you genuinely recall. Reference it naturally when relevant; never contradict it or claim you don't remember it:\n\n${memoryData.trim()}`
+        : "",
+    },
+    {
+      id: "user-custom",
+      priority: 60,
+      content: customPrompt
+        ? `\n\n## User's Custom Instructions:\n\n${customPrompt}`
+        : "",
+    },
+    {
+      id: "lore",
+      priority: 70,
+      content: loreText
+        ? `\n\n## World Lore Context — This is the established lore of the world. You must remember and reference it naturally in your responses. Do not contradict it. If the user's actions would affect this lore, acknowledge and evolve it organically:\n\n${loreText}`
+        : "",
+    },
+    {
+      id: "arc",
+      priority: 80,
+      content: arcText
+        ? `\n\n## ACTIVE STORY ARC — This is the scenario the user is currently roleplaying through. It takes precedence over the character's default scenario. Stay within this arc's setting, tone and premise. Drive the story along this arc; do not silently abandon it or reset to a different scenario:\n\n${arcText}`
+        : "",
+    },
+    {
+      id: "regen",
+      priority: 90,
+      content: regenInstruction?.trim()
+        ? `\n\n## REGENERATION DIRECTIVE — The user is asking you to redo your previous response with this specific guidance. Apply it faithfully while keeping all other rules (mandatory dialogue, length, MLA, in-character) intact:\n\n${regenInstruction.trim()}`
+        : "",
+    },
+    {
+      id: "length",
+      priority: 100,
+      content: lengthDirective?.trim() ? `\n\n${lengthDirective.trim()}` : "",
+    },
+    {
+      id: "artifacts",
+      priority: 110,
+      // Artifacts guidance only applies when the model can call tools.
+      content: supportsTools ? `\n\n${artifactsPrompt}` : "",
+    },
+  ];
+
+  return layers
+    .filter((l) => l.content !== "")
+    .sort((a, b) => a.priority - b.priority);
+}
+
+/** Join active, ordered layers into the final system-prompt string. */
+export function assembleLayers(layers: PromptLayer[]): string {
+  return layers.map((l) => l.content).join("");
+}
+
+export const systemPrompt = (args: SystemPromptArgs) =>
+  assembleLayers(buildPromptLayers(args));
 
 export const codePrompt = `
 You are a code generator that creates self-contained, executable code snippets. When writing code:
