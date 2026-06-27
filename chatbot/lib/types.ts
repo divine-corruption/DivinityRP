@@ -89,6 +89,16 @@ export interface LoreBook {
   updatedAt: number;
 }
 
+export type LoreCategory =
+  | "character"
+  | "location"
+  | "faction"
+  | "item"
+  | "event"
+  | "concept"
+  | "creature"
+  | "other";
+
 export interface LoreEntry {
   id: string;
   title: string;
@@ -96,6 +106,11 @@ export interface LoreEntry {
   keys: string[];
   characterId?: string;
   lorebookId?: string;
+  category?: LoreCategory;
+  /** Generated cover image URL for visual lore cards. */
+  image?: string;
+  /** Prompt used (or to be used) to generate the cover image. */
+  imagePrompt?: string;
   approved: boolean;
   source?: "manual" | "divinity" | "detection";
   createdAt: number;
@@ -109,6 +124,13 @@ export interface LoreSuggestion {
   keys: string[];
   characterId?: string;
   lorebookId?: string;
+  category?: LoreCategory;
+  /** Generated cover image URL (filled in asynchronously after creation). */
+  image?: string;
+  /** Prompt to generate the cover image. */
+  imagePrompt?: string;
+  /** True while the cover image is being generated. */
+  imageLoading?: boolean;
   reasoning: string;
   createdAt: number;
 }

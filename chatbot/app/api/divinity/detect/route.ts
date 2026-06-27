@@ -18,8 +18,10 @@ If lore IS detected, respond with:
   "detected": true,
   "suggestion": {
     "title": "Short title for the lore entry",
+    "category": "one of: character, location, faction, item, event, concept, creature, other",
     "content": "2-4 paragraphs of rich lore content based on what was revealed",
     "keys": ["keyword1", "keyword2"],
+    "image_prompt": "A vivid visual description for cover art — subject, setting, mood, art style",
     "reasoning": "Why this is important lore to save"
   }
 }

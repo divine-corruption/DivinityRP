@@ -39,6 +39,7 @@ export interface RoleplayActions {
   // DivinityAI
   setDivinityAI: (state: Partial<DivinityAIState>) => void;
   addDivinitySuggestion: (suggestion: LoreSuggestion) => void;
+  updateDivinitySuggestion: (id: string, patch: Partial<LoreSuggestion>) => void;
   removeDivinitySuggestion: (id: string) => void;
   clearDivinitySuggestions: () => void;
   // Lore Detection
