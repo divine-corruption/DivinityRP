@@ -2,8 +2,10 @@
 
 import {
   BookOpen,
+  BrainCircuit,
   Image,
   Info,
+  Loader2,
   Plus,
   X,
   Maximize2,
@@ -36,6 +38,12 @@ import {
   useArtifactSelector,
 } from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage, MediaItem } from "@/lib/types";
+import {
+  type ActiveArc,
+  clearActiveArc,
+  loadActiveArc,
+  saveActiveArc,
+} from "@/lib/active-arc";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
@@ -355,6 +363,7 @@ export function ChatShell() {
     galleryItems,
     addGalleryItems,
     clearGalleryItems,
+    addLoreEntry,
   } = useRoleplay();
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
@@ -369,10 +378,77 @@ export function ChatShell() {
   const [visionIndex, setVisionIndex] = useState(0);
   const [storyPickerOpen, setStoryPickerOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [activeArc, setActiveArc] = useState<ActiveArc | null>(null);
+  const [compiling, setCompiling] = useState(false);
 
   const openVision = (item: MediaItem, list: MediaItem[]) => {
     setVisionList(list);
     setVisionIndex(Math.max(0, list.findIndex((m) => m.id === item.id)));
+  };
+
+  // Compile the current conversation (under the active arc) into a durable
+  // character memory via xAI, then save it as an approved lore entry.
+  const handleCompileArc = async () => {
+    if (!selectedCharacter) {
+      toast.error("Select a character first");
+      return;
+    }
+    const transcript = messages
+      .map((m) => {
+        const text = m.parts
+          ?.filter((p) => p.type === "text")
+          .map((p) => (p as { text: string }).text)
+          .join(" ")
+          .trim();
+        if (!text) return "";
+        const who = m.role === "user" ? "User" : selectedCharacter.name;
+        return `${who}: ${text}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    if (!transcript) {
+      toast.error("Nothing to compile yet — start the conversation first");
+      return;
+    }
+
+    setCompiling(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/compile`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript,
+            arcTitle: activeArc?.title,
+            characterName: selectedCharacter.name,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({ error: "" }));
+        throw new Error(error || "Compile failed");
+      }
+      const data = await res.json();
+      addLoreEntry({
+        id: nanoid(),
+        title: data.title || activeArc?.title || "Compiled Memory",
+        content: data.summary,
+        keys: Array.isArray(data.keys) ? data.keys : [],
+        characterId: selectedCharacter.id,
+        category: "event",
+        approved: true,
+        source: "divinity",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      toast.success(`Saved memory: ${data.title || "Compiled Memory"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to compile");
+    } finally {
+      setCompiling(false);
+    }
   };
 
   // Upload files from the Gallery panel; on success add them to the gallery
@@ -428,6 +504,14 @@ export function ChatShell() {
   const stopRef = useRef(stop);
   stopRef.current = stop;
 
+  // Hydrate the active arc for the current chat on first mount so the banner
+  // and RP context persist across reloads. Subsequent chat switches are
+  // handled by the prevChatIdRef effect below.
+  useEffect(() => {
+    setActiveArc(loadActiveArc(chatId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
@@ -439,6 +523,9 @@ export function ChatShell() {
       setActivePanel(null);
       setVisionList(null);
       setStoryPickerOpen(false);
+      // Restore this chat's persisted arc (if any) so the banner + RP context
+      // survive navigating away and back. Falls back to null for fresh chats.
+      setActiveArc(loadActiveArc(chatId));
     }
   }, [chatId, setArtifact]);
   const prevMessageCountRef = useRef(messages.length);
@@ -665,6 +752,19 @@ export function ChatShell() {
                 >
                   <Plus className="size-4" />
                 </button>
+                <button
+                  type="button"
+                  onClick={handleCompileArc}
+                  disabled={compiling}
+                  className="rounded-lg p-2 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  title="Compile this arc into a saved character memory (xAI)"
+                >
+                  {compiling ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="size-4" />
+                  )}
+                </button>
               </div>
             </div>
           )}
@@ -674,6 +774,47 @@ export function ChatShell() {
             isReadonly={isReadonly}
             selectedVisibilityType={visibilityType}
           />
+
+          {activeArc && (
+            <div className="mx-auto mt-2 w-full max-w-4xl px-2 md:px-4">
+              <div className="relative flex items-center gap-3 overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent px-4 py-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                  <BookOpen className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary/80">
+                      Story Arc
+                    </span>
+                    {activeArc.tone && (
+                      <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                        {activeArc.tone}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="truncate text-sm font-bold text-foreground">
+                    {activeArc.title}
+                  </h3>
+                  {activeArc.summary && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {activeArc.summary}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearActiveArc(chatId);
+                    setActiveArc(null);
+                  }}
+                  className="shrink-0 rounded-lg p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
+                  title="Dismiss"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:rounded-tl-[12px] md:border-t md:border-l md:border-border/40">
             <Messages
@@ -878,6 +1019,19 @@ export function ChatShell() {
                 } as ChatMessage,
               ]);
             }
+            // Build the active arc and persist it per-chat so the banner and the
+            // RP context survive leaving and resuming this chat.
+            const arc: ActiveArc = {
+              nodeId: node.id,
+              title: node.title,
+              summary: node.summary,
+              tone: node.tone,
+              scenario: node.scenario,
+              firstMes: node.firstMes,
+              appliedAt: Date.now(),
+            };
+            saveActiveArc(chatId, arc);
+            setActiveArc(arc);
             setStoryPickerOpen(false);
           }}
           onClose={() => setStoryPickerOpen(false)}

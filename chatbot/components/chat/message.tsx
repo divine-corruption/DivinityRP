@@ -1,6 +1,7 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { Vote } from "@/lib/db/schema";
+import { useRoleplay } from "@/lib/roleplay-store";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
 import { MessageContent, MessageResponse } from "../ai-elements/message";
@@ -49,6 +50,8 @@ const PurePreviewMessage = ({
   );
 
   useDataStream();
+
+  const { selectedCharacter } = useRoleplay();
 
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -369,6 +372,8 @@ const PurePreviewMessage = ({
       key={`action-${message.id}`}
       message={message}
       onEdit={onEdit ? () => onEdit(message) : undefined}
+      regenerate={_regenerate}
+      setMessages={_setMessages}
       vote={vote}
     />
   );
@@ -402,14 +407,34 @@ const PurePreviewMessage = ({
         )}
       >
         {isAssistant && (
-          <div className="flex h-[calc(13px*1.65)] shrink-0 items-center">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
-              <SparklesIcon size={13} />
+          <div className="flex shrink-0 items-start pt-0.5">
+            <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
+              {selectedCharacter?.avatar ? (
+                // biome-ignore lint/performance/noImgElement: character avatar URL
+                <img
+                  alt={selectedCharacter.name}
+                  className="h-full w-full object-cover"
+                  src={selectedCharacter.avatar}
+                />
+              ) : selectedCharacter?.name ? (
+                <span className="font-bold text-xs">
+                  {selectedCharacter.name.charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <SparklesIcon size={14} />
+              )}
             </div>
           </div>
         )}
         {isAssistant ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-2">{content}</div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            {selectedCharacter?.name && (
+              <span className="font-semibold text-[12px] text-foreground/80">
+                {selectedCharacter.name}
+              </span>
+            )}
+            {content}
+          </div>
         ) : (
           content
         )}
@@ -421,6 +446,7 @@ const PurePreviewMessage = ({
 export const PreviewMessage = PurePreviewMessage;
 
 export const ThinkingMessage = () => {
+  const { selectedCharacter } = useRoleplay();
   return (
     <div
       className="group/message w-full"
@@ -428,16 +454,36 @@ export const ThinkingMessage = () => {
       data-testid="message-assistant-loading"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-[calc(13px*1.65)] shrink-0 items-center">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
-            <SparklesIcon size={13} />
+        <div className="flex shrink-0 items-start pt-0.5">
+          <div className="flex size-8 items-center justify-center overflow-hidden rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
+            {selectedCharacter?.avatar ? (
+              // biome-ignore lint/performance/noImgElement: character avatar URL
+              <img
+                alt={selectedCharacter.name}
+                className="h-full w-full object-cover"
+                src={selectedCharacter.avatar}
+              />
+            ) : selectedCharacter?.name ? (
+              <span className="font-bold text-xs">
+                {selectedCharacter.name.charAt(0).toUpperCase()}
+              </span>
+            ) : (
+              <SparklesIcon size={14} />
+            )}
           </div>
         </div>
 
-        <div className="flex h-[calc(13px*1.65)] items-center text-[13px] leading-[1.65]">
-          <Shimmer className="font-medium" duration={1}>
-            Thinking...
-          </Shimmer>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {selectedCharacter?.name && (
+            <span className="font-semibold text-[12px] text-foreground/80">
+              {selectedCharacter.name}
+            </span>
+          )}
+          <div className="flex h-[calc(13px*1.65)] items-center text-[13px] leading-[1.65]">
+            <Shimmer className="font-medium" duration={1}>
+              Thinking...
+            </Shimmer>
+          </div>
         </div>
       </div>
     </div>

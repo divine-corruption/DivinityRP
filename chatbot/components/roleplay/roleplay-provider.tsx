@@ -42,6 +42,12 @@ function parseSillyTavern(data: Record<string, unknown>): Character {
     scenario: String(char?.scenario ?? data?.scenario ?? ""),
     firstMes: String(char?.first_mes ?? data?.first_mes ?? char?.firstMes ?? ""),
     mesExample: String(char?.mes_example ?? data?.mes_example ?? char?.mesExample ?? ""),
+    systemPrompt:
+      (char?.system_prompt as string | undefined) ??
+      (char?.system_prompt_override as string | undefined) ??
+      (data?.system_prompt as string | undefined) ??
+      (char?.systemPrompt as string | undefined) ??
+      undefined,
     avatar: images[0]?.url,
     images,
     tags: Array.isArray(char?.tags) ? (char.tags as string[]) : [],
@@ -196,6 +202,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
           scenario: character.scenario,
           first_mes: character.firstMes,
           mes_example: character.mesExample,
+          system_prompt: character.systemPrompt,
           tags: character.tags,
           avatar: character.avatar,
           images: character.images,

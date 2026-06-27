@@ -72,6 +72,8 @@ export interface Character {
   scenario: string;
   firstMes: string;
   mesExample: string;
+  /** Optional per-character system prompt — directorial instructions injected with high priority. */
+  systemPrompt?: string;
   avatar?: string;
   images: CharacterImage[];
   tags: string[];

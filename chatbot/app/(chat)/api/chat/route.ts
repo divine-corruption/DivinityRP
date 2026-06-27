@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, characterData, loreData } =
+    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, characterData, loreData, arcData, regenInstruction } =
       requestBody;
 
     const [, session] = await Promise.all([
@@ -189,6 +189,22 @@ export async function POST(request: Request) {
 
     const modelMessages = await convertToModelMessages(uiMessages);
 
+    // Extract an optional per-character system prompt from the serialized
+    // character payload so it can be injected with high priority.
+    let characterSystemPrompt: string | undefined;
+    if (characterData) {
+      try {
+        const parsedChar = JSON.parse(characterData) as {
+          system_prompt?: string;
+          systemPrompt?: string;
+        };
+        characterSystemPrompt =
+          parsedChar.system_prompt || parsedChar.systemPrompt || undefined;
+      } catch {
+        // characterData may be a plain string card; ignore.
+      }
+    }
+
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
@@ -199,7 +215,10 @@ export async function POST(request: Request) {
             supportsTools,
             character: characterData,
             customPrompt,
+            characterSystemPrompt,
             loreData,
+            arcData,
+            regenInstruction,
           }),
           messages: modelMessages,
           stopWhen: stepCountIs(5),

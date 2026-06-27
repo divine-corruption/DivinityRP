@@ -150,6 +150,20 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
           typeof window !== "undefined"
             ? localStorage.getItem("divine_lore") ?? undefined
             : undefined;
+        const arcData =
+          typeof window !== "undefined"
+            ? localStorage.getItem(`divine_chat_arc:${request.id}`) ?? undefined
+            : undefined;
+        // One-shot steering instruction for a guided regeneration. Read once
+        // and immediately cleared so it only affects this single request.
+        let regenInstruction: string | undefined;
+        if (typeof window !== "undefined") {
+          const v = localStorage.getItem("divine_regen_instruction");
+          if (v) {
+            regenInstruction = v;
+            localStorage.removeItem("divine_regen_instruction");
+          }
+        }
 
         return {
           body: {
@@ -162,6 +176,8 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             customPrompt,
             characterData,
             loreData,
+            arcData,
+            regenInstruction,
             ...request.body,
           },
         };
