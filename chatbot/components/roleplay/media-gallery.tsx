@@ -1,7 +1,7 @@
 "use client";
 
-import { Film, ImageIcon, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Film, ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import type { MediaItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -26,12 +26,29 @@ export function MediaGallery({
   items,
   onSelect,
   onClear,
+  onUpload,
 }: {
   items: MediaItem[];
   onSelect: (item: MediaItem, list: MediaItem[]) => void;
   onClear?: () => void;
+  /** Upload one or more files; resolves once they've been added to the gallery. */
+  onUpload?: (files: File[]) => Promise<void> | void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0 || !onUpload) return;
+    const files = Array.from(fileList);
+    setUploading(true);
+    try {
+      await onUpload(files);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const filtered = useMemo(() => {
     const sorted = [...items].sort((a, b) => b.createdAt - a.createdAt);
@@ -68,16 +85,44 @@ export function MediaGallery({
             </button>
           ))}
         </div>
-        {onClear && items.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
-            title="Clear gallery"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onUpload && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
+                title="Upload image or video to gallery"
+              >
+                {uploading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Upload className="size-3.5" />
+                )}
+                <span>{uploading ? "Uploading…" : "Upload"}</span>
+              </button>
+            </>
+          )}
+          {onClear && items.length > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-destructive/10 hover:text-destructive"
+              title="Clear gallery"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
