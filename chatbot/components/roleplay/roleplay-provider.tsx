@@ -1,0 +1,365 @@
+"use client";
+
+import { nanoid } from "nanoid";
+import { useCallback, useMemo, useState } from "react";
+import { RoleplayCtx } from "@/lib/roleplay-store";
+import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, SidebarView, StoryNode } from "@/lib/types";
+
+function parseSillyTavern(data: Record<string, unknown>): Character {
+  const char: Record<string, unknown> = (data?.data as Record<string, unknown> | undefined) || data;
+  const images: { url: string; caption?: string }[] = [];
+
+  const charAvatar = char?.avatar;
+  if (Array.isArray(charAvatar)) {
+    for (const img of charAvatar) {
+      if (typeof img === "string") {
+        images.push({ url: img });
+      } else if (img && typeof img === "object" && "path" in (img as Record<string, unknown>)) {
+        const imgObj = img as Record<string, unknown>;
+        images.push({ url: String(imgObj.path), caption: imgObj.caption as string | undefined });
+      }
+    }
+  }
+
+  const charGallery = char?.gallery;
+  if (charGallery) {
+    const gallery = Array.isArray(charGallery) ? charGallery : [charGallery];
+    for (const item of gallery) {
+      if (typeof item === "string") {
+        images.push({ url: item });
+      } else if (item && typeof item === "object" && "path" in (item as Record<string, unknown>)) {
+        const itemObj = item as Record<string, unknown>;
+        images.push({ url: String(itemObj.path), caption: itemObj.caption as string | undefined });
+      }
+    }
+  }
+
+  return {
+    id: nanoid(),
+    name: String(char?.name ?? data?.name ?? "Unknown"),
+    description: String(char?.description ?? data?.description ?? ""),
+    personality: String(char?.personality ?? data?.personality ?? ""),
+    scenario: String(char?.scenario ?? data?.scenario ?? ""),
+    firstMes: String(char?.first_mes ?? data?.first_mes ?? char?.firstMes ?? ""),
+    mesExample: String(char?.mes_example ?? data?.mes_example ?? char?.mesExample ?? ""),
+    avatar: images[0]?.url,
+    images,
+    tags: Array.isArray(char?.tags) ? (char.tags as string[]) : [],
+    metadata: char ?? {},
+    importedAt: Date.now(),
+  };
+}
+
+function parseChub(data: Record<string, unknown>): Character {
+  const node: Record<string, unknown> = (data?.node as Record<string, unknown> | undefined) || data;
+  const char: Record<string, unknown> = (node?.character as Record<string, unknown> | undefined) || node;
+
+  const images: { url: string; caption?: string }[] = [];
+
+  const avatarUrl = char?.avatar_url;
+  if (typeof avatarUrl === "string") {
+    images.push({ url: avatarUrl });
+  }
+
+  const charImages = char?.images;
+  if (Array.isArray(charImages)) {
+    for (const img of charImages) {
+      if (typeof img === "string") {
+        images.push({ url: img });
+      } else if (img && typeof img === "object") {
+        const imgObj = img as Record<string, unknown>;
+        const imgUrl = imgObj.url || imgObj.path;
+        if (typeof imgUrl === "string") {
+          images.push({ url: imgUrl, caption: imgObj.caption as string | undefined });
+        }
+      }
+    }
+  }
+
+  return {
+    id: nanoid(),
+    name: String(char?.name ?? "Unknown"),
+    description: String(char?.description ?? ""),
+    personality: String(char?.personality ?? ""),
+    scenario: String(char?.scenario ?? ""),
+    firstMes: String(char?.first_mes ?? char?.firstMes ?? ""),
+    mesExample: String(char?.mes_example ?? char?.mesExample ?? ""),
+    avatar: images[0]?.url,
+    images,
+    tags: Array.isArray(char?.tags) ? (char.tags as string[]) : [],
+    metadata: data,
+    importedAt: Date.now(),
+  };
+}
+
+export function detectImportFormat(data: unknown): "chub" | "sillytavern" | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+
+  const dNode = d.node as Record<string, unknown> | undefined;
+  const dCharacter = d.character as Record<string, unknown> | undefined;
+  const dData = d.data as Record<string, unknown> | undefined;
+
+  if (dNode?.character || dCharacter?.name) return "chub";
+  if (dData?.name || d.name) return "sillytavern";
+
+  return null;
+}
+
+export function importCharacterFromJson(data: unknown): Character {
+  const format = detectImportFormat(data);
+  if (format === "chub") return parseChub(data as Record<string, unknown>);
+  return parseSillyTavern(data as Record<string, unknown>);
+}
+
+const STORAGE_KEY_CHARACTERS = "divine_characters";
+const STORAGE_KEY_LORE = "divine_lore";
+const STORAGE_KEY_NODES = "divine_nodes";
+const STORAGE_KEY_LOREBOOKS = "divine_lorebooks";
+
+function loadJSON<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJSON(key: string, value: unknown) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+}
+
+const defaultDivinityAI: DivinityAIState = {
+  open: false,
+  messages: [],
+  suggestions: [],
+  loading: false,
+  selectedLorebookId: null,
+};
+
+const defaultLoreDetection: LoreDetection = {
+  active: false,
+  suggestion: null,
+  chatId: "",
+  messageId: "",
+};
+
+export function RoleplayProvider({ children }: { children: React.ReactNode }) {
+  const [characters, setCharacters] = useState<Character[]>(() =>
+    loadJSON<Character[]>(STORAGE_KEY_CHARACTERS, [])
+  );
+  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
+  const [loreEntries, setLoreEntries] = useState<LoreEntry[]>(() =>
+    loadJSON<LoreEntry[]>(STORAGE_KEY_LORE, [])
+  );
+  const [loreBooks, setLoreBooks] = useState<LoreBook[]>(() =>
+    loadJSON<LoreBook[]>(STORAGE_KEY_LOREBOOKS, [])
+  );
+  const [storyNodes, setStoryNodes] = useState<StoryNode[]>(() =>
+    loadJSON<StoryNode[]>(STORAGE_KEY_NODES, [])
+  );
+  const [currentView, setCurrentView] = useState<SidebarView>("dashboard");
+  const [galleryMedia, setGalleryMedia] = useState<{
+    url: string;
+    type: "image" | "video";
+  } | null>(null);
+  const [divinityAI, setDivinityAIState] = useState<DivinityAIState>(defaultDivinityAI);
+  const [loreDetection, setLoreDetectionState] = useState<LoreDetection>(defaultLoreDetection);
+
+  const handleImportCharacter = useCallback((data: unknown): Character => {
+    const char = importCharacterFromJson(data);
+    setCharacters((prev) => {
+      const updated = [...prev, char];
+      saveJSON(STORAGE_KEY_CHARACTERS, updated);
+      return updated;
+    });
+    return char;
+  }, []);
+
+  const handleSelectCharacter = useCallback((character: Character | null) => {
+    setSelectedCharacter(character);
+    if (character) {
+      setCurrentView("characters");
+      if (typeof window !== "undefined") {
+        const charData = JSON.stringify({
+          name: character.name,
+          description: character.description,
+          personality: character.personality,
+          scenario: character.scenario,
+          first_mes: character.firstMes,
+          mes_example: character.mesExample,
+          tags: character.tags,
+          avatar: character.avatar,
+          images: character.images,
+        });
+        localStorage.setItem("divine_active_character", charData);
+      }
+    } else {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("divine_active_character");
+      }
+    }
+  }, []);
+
+  const handleDeleteCharacter = useCallback((id: string) => {
+    setCharacters((prev) => {
+      const updated = prev.filter((c) => c.id !== id);
+      saveJSON(STORAGE_KEY_CHARACTERS, updated);
+      return updated;
+    });
+    setSelectedCharacter((prev) => (prev?.id === id ? null : prev));
+  }, []);
+
+  const handleAddLoreEntry = useCallback((entry: LoreEntry) => {
+    setLoreEntries((prev) => {
+      const updated = [...prev, entry];
+      saveJSON(STORAGE_KEY_LORE, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleUpdateLoreEntry = useCallback(
+    (id: string, entry: Partial<LoreEntry>) => {
+      setLoreEntries((prev) => {
+        const updated = prev.map((e) =>
+          e.id === id ? { ...e, ...entry, updatedAt: Date.now() } : e
+        );
+        saveJSON(STORAGE_KEY_LORE, updated);
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleDeleteLoreEntry = useCallback((id: string) => {
+    setLoreEntries((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      saveJSON(STORAGE_KEY_LORE, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleAddStoryNode = useCallback((node: StoryNode) => {
+    setStoryNodes((prev) => {
+      const updated = [...prev, node];
+      saveJSON(STORAGE_KEY_NODES, updated);
+      return updated;
+    });
+  }, []);
+
+  // LoreBook handlers
+  const handleAddLoreBook = useCallback((book: LoreBook) => {
+    setLoreBooks((prev) => {
+      const updated = [...prev, book];
+      saveJSON(STORAGE_KEY_LOREBOOKS, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleUpdateLoreBook = useCallback((id: string, book: Partial<LoreBook>) => {
+    setLoreBooks((prev) => {
+      const updated = prev.map((b) =>
+        b.id === id ? { ...b, ...book, updatedAt: Date.now() } : b
+      );
+      saveJSON(STORAGE_KEY_LOREBOOKS, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleDeleteLoreBook = useCallback((id: string) => {
+    setLoreBooks((prev) => {
+      const updated = prev.filter((b) => b.id !== id);
+      saveJSON(STORAGE_KEY_LOREBOOKS, updated);
+      return updated;
+    });
+    // Also remove lorebookId from entries
+    setLoreEntries((prev) => {
+      const updated = prev.map((e) =>
+        e.lorebookId === id ? { ...e, lorebookId: undefined } : e
+      );
+      saveJSON(STORAGE_KEY_LORE, updated);
+      return updated;
+    });
+  }, []);
+
+  // DivinityAI handlers
+  const handleSetDivinityAI = useCallback((state: Partial<DivinityAIState>) => {
+    setDivinityAIState((prev) => ({ ...prev, ...state }));
+  }, []);
+
+  const handleAddDivinitySuggestion = useCallback((suggestion: LoreSuggestion) => {
+    setDivinityAIState((prev) => ({
+      ...prev,
+      suggestions: [...prev.suggestions, suggestion],
+    }));
+  }, []);
+
+  const handleRemoveDivinitySuggestion = useCallback((id: string) => {
+    setDivinityAIState((prev) => ({
+      ...prev,
+      suggestions: prev.suggestions.filter((s) => s.id !== id),
+    }));
+  }, []);
+
+  const handleClearDivinitySuggestions = useCallback(() => {
+    setDivinityAIState((prev) => ({ ...prev, suggestions: [] }));
+  }, []);
+
+  // Lore Detection handlers
+  const handleSetLoreDetection = useCallback((detection: Partial<LoreDetection>) => {
+    setLoreDetectionState((prev) => ({ ...prev, ...detection }));
+  }, []);
+
+  const handleClearLoreDetection = useCallback(() => {
+    setLoreDetectionState(defaultLoreDetection);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      characters,
+      selectedCharacter,
+      loreEntries,
+      loreBooks,
+      storyNodes,
+      currentView,
+      galleryMedia,
+      divinityAI,
+      loreDetection,
+      setCurrentView,
+      importCharacter: handleImportCharacter,
+      selectCharacter: handleSelectCharacter,
+      deleteCharacter: handleDeleteCharacter,
+      addLoreEntry: handleAddLoreEntry,
+      updateLoreEntry: handleUpdateLoreEntry,
+      deleteLoreEntry: handleDeleteLoreEntry,
+      addStoryNode: handleAddStoryNode,
+      setGalleryMedia,
+      addLoreBook: handleAddLoreBook,
+      updateLoreBook: handleUpdateLoreBook,
+      deleteLoreBook: handleDeleteLoreBook,
+      setDivinityAI: handleSetDivinityAI,
+      addDivinitySuggestion: handleAddDivinitySuggestion,
+      removeDivinitySuggestion: handleRemoveDivinitySuggestion,
+      clearDivinitySuggestions: handleClearDivinitySuggestions,
+      setLoreDetection: handleSetLoreDetection,
+      clearLoreDetection: handleClearLoreDetection,
+    }),
+    [
+      characters, selectedCharacter, loreEntries, loreBooks, storyNodes,
+      currentView, galleryMedia, divinityAI, loreDetection,
+      handleImportCharacter, handleSelectCharacter, handleDeleteCharacter,
+      handleAddLoreEntry, handleUpdateLoreEntry, handleDeleteLoreEntry,
+      handleAddStoryNode,
+      handleAddLoreBook, handleUpdateLoreBook, handleDeleteLoreBook,
+      handleSetDivinityAI, handleAddDivinitySuggestion,
+      handleRemoveDivinitySuggestion, handleClearDivinitySuggestions,
+      handleSetLoreDetection, handleClearLoreDetection,
+    ]
+  );
+
+  return <RoleplayCtx.Provider value={value}>{children}</RoleplayCtx.Provider>;
+}
