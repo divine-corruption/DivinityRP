@@ -1,4 +1,6 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
+import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
 export const maxDuration = 120;
 
@@ -7,6 +9,27 @@ const XAI_API_KEY = process.env.XAI_API_KEY;
 const IMAGINE_API_KEY = process.env.IMAGINE_API_KEY;
 
 const XAI_IMAGE_MODEL = process.env.XAI_IMAGE_MODEL ?? "grok-2-image";
+
+/**
+ * Persist a generated image to R2 (if configured) so it doesn't rely on the
+ * provider's temporary URL. Falls back to the original URL on any failure.
+ */
+async function persistToR2(srcUrl?: string): Promise<string | undefined> {
+  if (!srcUrl || !isR2Configured()) return srcUrl;
+  // Don't try to fetch base64 payloads as URLs.
+  if (!/^https?:\/\//i.test(srcUrl)) return srcUrl;
+  try {
+    const resp = await fetch(srcUrl);
+    if (!resp.ok) return srcUrl;
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const ct = resp.headers.get("content-type") ?? "image/png";
+    const ext = ct.includes("jpeg") ? "jpg" : ct.split("/")[1] ?? "png";
+    const { url } = await uploadToR2(`generated/${randomUUID()}.${ext}`, buf, ct);
+    return url;
+  } catch {
+    return srcUrl;
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -53,7 +76,8 @@ export async function POST(request: Request) {
       }
 
       const data = await response.json();
-      const url = data.data?.[0]?.url ?? data.data?.[0]?.b64_json;
+      const rawUrl = data.data?.[0]?.url ?? data.data?.[0]?.b64_json;
+      const url = await persistToR2(rawUrl);
       return NextResponse.json({ url, data: data.data });
     }
 
