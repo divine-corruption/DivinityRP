@@ -6,7 +6,7 @@ import {
   Image,
   Info,
   Loader2,
-  Plus,
+  MessagesSquare,
   X,
   Maximize2,
   Minimize2,
@@ -20,7 +20,7 @@ import { useRoleplay } from "@/lib/roleplay-store";
 import { LoreNotification } from "@/components/roleplay/lore-notification";
 import { DivineVision } from "@/components/roleplay/divine-vision";
 import { MediaGallery } from "@/components/roleplay/media-gallery";
-import { StoryNodePicker } from "@/components/roleplay/story-node-picker";
+import { ConversationPicker } from "@/components/roleplay/conversation-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,14 +38,9 @@ import {
   useArtifactSelector,
 } from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage, MediaItem } from "@/lib/types";
+import { type ActiveArc, clearActiveArc, loadActiveArc } from "@/lib/active-arc";
 import {
-  type ActiveArc,
-  clearActiveArc,
-  loadActiveArc,
-  saveActiveArc,
-} from "@/lib/active-arc";
-import {
-  createArcThread,
+  type ConversationThread,
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { cn } from "@/lib/utils";
@@ -380,7 +375,7 @@ export function ChatShell() {
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [visionList, setVisionList] = useState<MediaItem[] | null>(null);
   const [visionIndex, setVisionIndex] = useState(0);
-  const [storyPickerOpen, setStoryPickerOpen] = useState(false);
+  const [conversationsOpen, setConversationsOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [activeArc, setActiveArc] = useState<ActiveArc | null>(null);
   const [compiling, setCompiling] = useState(false);
@@ -526,7 +521,7 @@ export function ChatShell() {
       setAttachments([]);
       setActivePanel(null);
       setVisionList(null);
-      setStoryPickerOpen(false);
+      setConversationsOpen(false);
       // Restore this chat's persisted arc (if any) so the banner + RP context
       // survive navigating away and back. Falls back to null for fresh chats.
       setActiveArc(loadActiveArc(chatId));
@@ -750,11 +745,11 @@ export function ChatShell() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStoryPickerOpen(true)}
+                  onClick={() => setConversationsOpen(true)}
                   className="rounded-lg p-2 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                  title="Story Arcs"
+                  title="Conversations"
                 >
-                  <Plus className="size-4" />
+                  <MessagesSquare className="size-4" />
                 </button>
                 <button
                   type="button"
@@ -987,56 +982,16 @@ export function ChatShell() {
         />
       )}
 
-      {storyPickerOpen && selectedCharacter && (
-        <StoryNodePicker
+      {conversationsOpen && selectedCharacter && (
+        <ConversationPicker
           character={selectedCharacter}
-          chatId={chatId}
-          onApplyArc={(node) => {
-            // Persist the chosen arc's scenario onto the active character so the
-            // chat API picks it up on the next message.
-            if (typeof window !== "undefined") {
-              try {
-                const raw = localStorage.getItem("divine_active_character");
-                const base = raw ? JSON.parse(raw) : {};
-                localStorage.setItem(
-                  "divine_active_character",
-                  JSON.stringify({
-                    ...base,
-                    scenario: node.scenario || base.scenario,
-                    first_mes: node.firstMes || base.first_mes,
-                    active_arc: node.title,
-                  })
-                );
-              } catch {
-                // non-critical
-              }
-            }
-
-            // Beginning an arc opens a BRAND-NEW conversation thread, so its
-            // history is stored separately from the current chat. We don't
-            // splice the opener into the current messages anymore (that was
-            // unsaved and bled across conversations); instead the opener is
-            // persisted to the new thread and loaded when it opens.
-            const characterId =
-              selectedCharacter?.id ?? node.characterId ?? "unknown";
-            const thread = createArcThread({
-              characterId,
-              arcId: node.id,
-              title: node.title,
-            });
-
-            const arc: ActiveArc = {
-              nodeId: node.id,
-              title: node.title,
-              summary: node.summary,
-              tone: node.tone,
-              scenario: node.scenario,
-              firstMes: node.firstMes,
-              appliedAt: Date.now(),
-            };
-            saveActiveArc(thread.id, arc);
-
-            if (node.firstMes) {
+          activeChatId={chatId}
+          onOpenThread={(thread: ConversationThread) => {
+            // Opening (or starting) a conversation switches the active thread.
+            // A brand-new conversation seeds the character's opening message so
+            // it loads on resume; the active-thread signal makes the chat hook
+            // resolve and hydrate this thread's own persisted history.
+            if (selectedCharacter.firstMes) {
               fetch(
                 `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages/seed`,
                 {
@@ -1044,21 +999,19 @@ export function ChatShell() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     chatId: thread.id,
-                    title: node.title,
-                    message: { text: node.firstMes },
+                    title: thread.title,
+                    message: { text: selectedCharacter.firstMes },
                   }),
                 }
               ).catch(() => {
-                /* non-critical */
+                /* non-critical: seed only applies to an empty thread */
               });
             }
-
-            // Switch the active conversation to the new arc thread.
             setActiveThreadId(thread.id);
-            setActiveArc(arc);
-            setStoryPickerOpen(false);
+            setActiveArc(null);
+            setConversationsOpen(false);
           }}
-          onClose={() => setStoryPickerOpen(false)}
+          onClose={() => setConversationsOpen(false)}
         />
       )}
 

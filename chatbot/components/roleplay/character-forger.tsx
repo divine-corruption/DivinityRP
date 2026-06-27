@@ -39,7 +39,7 @@ const SCENES = [
 ] as const;
 
 export function CharacterForger() {
-  const { importCharacter, addStoryNode } = useRoleplay();
+  const { importCharacter } = useRoleplay();
   const [concept, setConcept] = useState("");
   const [name, setName] = useState("");
   const [appearance, setAppearance] = useState("");
@@ -275,30 +275,7 @@ export function CharacterForger() {
       })),
     });
 
-    // Seed the forged story arcs as selectable Character Story Nodes.
-    const arcs = result.story_arcs ?? [];
-    let arcCount = 0;
-    for (const arc of arcs) {
-      if (!arc?.title) continue;
-      addStoryNode({
-        id: nanoid(),
-        characterId: char.id,
-        title: arc.title,
-        tone: arc.tone,
-        summary: arc.summary ?? "",
-        scenario: arc.hook ? `${arc.summary ?? ""}\n\n${arc.hook}`.trim() : arc.summary,
-        kind: "arc",
-        chatId: "",
-        createdAt: Date.now(),
-      });
-      arcCount++;
-    }
-
-    toast.success(
-      arcCount > 0
-        ? `Imported ${char.name} + ${arcCount} story arcs`
-        : `Imported ${char.name} into engine`
-    );
+    toast.success(`Imported ${char.name} into engine`);
   };
 
   return (
@@ -649,40 +626,6 @@ export function CharacterForger() {
                     <span className="text-xs font-medium text-muted-foreground">First Message</span>
                     <div className="mt-0.5 rounded-lg bg-muted/50 p-3 italic text-xs">
                       {result.first_mes}
-                    </div>
-                  </div>
-                )}
-                {result.story_arcs && result.story_arcs.length > 0 && (
-                  <div>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Story Arcs ({result.story_arcs.length})
-                    </span>
-                    <div className="mt-1.5 space-y-1.5">
-                      {result.story_arcs.map((arc, i) => (
-                        <div
-                          key={i}
-                          className="rounded-lg border border-border/20 bg-muted/30 p-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[11px] font-semibold">{arc.title}</p>
-                            {arc.tone && (
-                              <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">
-                                {arc.tone}
-                              </span>
-                            )}
-                          </div>
-                          {arc.summary && (
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">
-                              {arc.summary}
-                            </p>
-                          )}
-                          {arc.hook && (
-                            <p className="mt-1 text-[10px] italic text-foreground/70">
-                              ↪ {arc.hook}
-                            </p>
-                          )}
-                        </div>
-                      ))}
                     </div>
                   </div>
                 )}

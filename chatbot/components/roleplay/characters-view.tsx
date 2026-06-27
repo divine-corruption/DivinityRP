@@ -1,17 +1,25 @@
 "use client";
 
-import { BookMarked, Hammer, Loader2, Play, Sparkles, Trash2, Upload } from "lucide-react";
-import { CharacterForger } from "./character-forger";
-import { nanoid } from "nanoid";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { type ActiveArc, saveActiveArc } from "@/lib/active-arc";
 import {
-  createArcThread,
+  Hammer,
+  Loader2,
+  MessagesSquare,
+  Pencil,
+  Play,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  createNewThread,
+  listThreadsForCharacter,
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { useRoleplay } from "@/lib/roleplay-store";
-import type { Character, StoryNode } from "@/lib/types";
+import type { Character } from "@/lib/types";
+import { CharacterForger } from "./character-forger";
 
 function CharacterCard({
   character,
@@ -23,25 +31,33 @@ function CharacterCard({
   onDelete: () => void;
 }) {
   return (
-    <div className="group relative rounded-xl border border-border/30 bg-card transition-all hover:border-border/60 hover:shadow-md">
+    <div className="divine-card group relative overflow-hidden rounded-2xl">
       <button
         type="button"
         onClick={onSelect}
-        className="flex w-full flex-col items-center p-4 text-center"
+        className="flex w-full flex-col items-center p-5 text-center"
       >
-        <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-muted">
-          {character.avatar ? (
-            <img
-              src={character.avatar}
-              alt={character.name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="text-xl font-bold">{character.name.charAt(0)}</span>
-          )}
+        <div className="relative mb-3.5">
+          <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-primary/40 via-fuchsia-500/30 to-transparent opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-100" />
+          <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-border/60 transition-all group-hover:ring-primary/60">
+            {character.avatar ? (
+              // biome-ignore lint/performance/noImgElement: user-supplied avatar
+              <img
+                src={character.avatar}
+                alt={character.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="bg-gradient-to-br from-primary to-fuchsia-400 bg-clip-text text-2xl font-bold text-transparent">
+                {character.name.charAt(0)}
+              </span>
+            )}
+          </div>
         </div>
-        <h3 className="text-sm font-medium truncate w-full">{character.name}</h3>
-        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+        <h3 className="w-full truncate text-sm font-semibold tracking-tight">
+          {character.name}
+        </h3>
+        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
           {character.description || "No description"}
         </p>
       </button>
@@ -98,7 +114,7 @@ export function CharactersView() {
         <button
           type="button"
           onClick={() => setShowForge(false)}
-          className="sticky top-0 z-10 flex items-center gap-1 bg-background p-4 text-sm text-muted-foreground hover:text-foreground"
+          className="sticky top-0 z-10 flex items-center gap-1 bg-background/80 p-4 text-sm text-muted-foreground backdrop-blur hover:text-foreground"
         >
           &larr; Back to characters
         </button>
@@ -117,10 +133,10 @@ export function CharactersView() {
   }
 
   return (
-    <div className="flex h-full flex-col p-6 overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto p-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Characters</h1>
+          <h1 className="text-xl font-bold tracking-tight">Characters</h1>
           <p className="text-sm text-muted-foreground">
             {characters.length} character{characters.length !== 1 ? "s" : ""}
           </p>
@@ -136,7 +152,7 @@ export function CharactersView() {
           <button
             type="button"
             onClick={() => setShowForge(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-border/30 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent"
           >
             <Hammer className="size-4" />
             Forge
@@ -145,7 +161,7 @@ export function CharactersView() {
             type="button"
             disabled={isImporting}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="divine-glow-btn inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             <Upload className="size-4" />
             Import JSON
@@ -186,137 +202,35 @@ function CharacterDetailView({
   character: Character;
   onBack: () => void;
 }) {
-  const { selectCharacter, setCurrentView, storyNodes, addStoryNode, deleteStoryNode } =
-    useRoleplay();
-  const [generatingArcs, setGeneratingArcs] = useState(false);
+  const { selectCharacter, updateCharacter } = useRoleplay();
+  const [editing, setEditing] = useState(false);
 
-  const arcs = useMemo(
-    () =>
-      storyNodes
-        .filter((n) => n.characterId === character.id)
-        .sort((a, b) => b.createdAt - a.createdAt),
-    [storyNodes, character.id]
-  );
+  const threads = listThreadsForCharacter(character.id);
 
-  const generateArcs = async () => {
-    setGeneratingArcs(true);
-    try {
-      const res = await fetch("/api/story-arcs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          character: {
-            name: character.name,
-            description: character.description,
-            personality: character.personality,
-            scenario: character.scenario,
-            tags: character.tags,
-          },
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Failed to generate arcs");
-      }
-      const data = await res.json();
-      const generated: {
-        title: string;
-        tone?: string;
-        summary?: string;
-        scenario?: string;
-        first_mes?: string;
-      }[] = data.arcs ?? [];
-      if (generated.length === 0) {
-        toast.error("Grok returned no arcs");
-        return;
-      }
-      for (const a of generated) {
-        addStoryNode({
-          id: nanoid(),
-          characterId: character.id,
-          title: a.title,
-          tone: a.tone,
-          summary: a.summary ?? "",
-          scenario: a.scenario,
-          firstMes: a.first_mes,
-          kind: "arc",
-          chatId: "",
-          createdAt: Date.now(),
-        });
-      }
-      toast.success(`Grok forged ${generated.length} story arcs`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to generate");
-    } finally {
-      setGeneratingArcs(false);
-    }
-  };
-
-  const beginArc = (node: StoryNode) => {
-    // Apply the arc scenario to the character and open the chat.
-    if (typeof window !== "undefined") {
-      const charData = JSON.stringify({
-        name: character.name,
-        description: character.description,
-        personality: character.personality,
-        scenario: node.scenario || character.scenario,
-        first_mes: node.firstMes || character.firstMes,
-        mes_example: character.mesExample,
-        system_prompt: character.systemPrompt,
-        tags: character.tags,
-        avatar: character.avatar,
-        images: character.images,
-        active_arc: node.title,
-      });
-      localStorage.setItem("divine_active_character", charData);
-
-      // Beginning an arc creates a BRAND-NEW conversation thread so its full
-      // history is stored separately (a new conversation), exactly like
-      // starting a fresh chat dedicated to this arc.
-      const thread = createArcThread({
-        characterId: character.id,
-        arcId: node.id,
-        title: node.title,
-      });
-
-      // Persist the arc context against the new thread so the RP stays in-arc
-      // and the banner resumes when the thread is reopened.
-      const arc: ActiveArc = {
-        nodeId: node.id,
-        title: node.title,
-        summary: node.summary,
-        tone: node.tone,
-        scenario: node.scenario,
-        firstMes: node.firstMes,
-        appliedAt: Date.now(),
-      };
-      saveActiveArc(thread.id, arc);
-
-      // Seed + persist the arc's opening message so it loads on resume.
-      if (node.firstMes) {
-        fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages/seed`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chatId: thread.id,
-            title: node.title,
-            message: { text: node.firstMes },
-          }),
-        }).catch(() => {
-          /* non-critical */
-        });
-      }
-
-      // Make this the active conversation.
-      setActiveThreadId(thread.id);
-    }
+  const handleNewConversation = () => {
+    const thread = createNewThread({ characterId: character.id });
+    setActiveThreadId(thread.id);
+    // Selecting the character renders the chat shell on the active thread.
     selectCharacter(character);
-    setCurrentView("characters");
-    toast.success(`Starting arc: ${node.title}`);
+    toast.success("New conversation started");
   };
+
+  if (editing) {
+    return (
+      <CharacterEditView
+        character={character}
+        onClose={() => setEditing(false)}
+        onSave={(patch) => {
+          updateCharacter(character.id, patch);
+          setEditing(false);
+          toast.success("Character updated");
+        }}
+      />
+    );
+  }
 
   return (
-    <div className="flex h-full flex-col p-6 overflow-y-auto">
+    <div className="flex h-full flex-col overflow-y-auto p-6">
       <button
         type="button"
         onClick={onBack}
@@ -326,29 +240,35 @@ function CharacterDetailView({
       </button>
 
       <div className="mb-6 flex items-start gap-6">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-muted">
-          {character.avatar ? (
-            <img
-              src={character.avatar}
-              alt={character.name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="text-3xl font-bold">
-              {character.name.charAt(0)}
-            </span>
-          )}
+        <div className="relative shrink-0">
+          <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-tr from-primary/40 via-fuchsia-500/25 to-transparent blur-md" />
+          <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60">
+            {character.avatar ? (
+              // biome-ignore lint/performance/noImgElement: user-supplied avatar
+              <img
+                src={character.avatar}
+                alt={character.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-3xl font-bold">
+                {character.name.charAt(0)}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold">{character.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">
+            {character.name}
+          </h1>
+          <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">
             {character.description}
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {character.tags.slice(0, 8).map((tag) => (
               <span
                 key={tag}
-                className="rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
               >
                 {tag}
               </span>
@@ -357,110 +277,88 @@ function CharacterDetailView({
         </div>
       </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-6 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => selectCharacter(character)}
-          className="inline-flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
+          className="divine-glow-btn inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"
         >
           <Play className="size-4" />
-          Start Roleplay
+          {threads.length > 0 ? "Resume Roleplay" : "Start Roleplay"}
         </button>
         <button
           type="button"
-          onClick={generateArcs}
-          disabled={generatingArcs}
-          className="inline-flex items-center gap-2 rounded-lg border border-border/30 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+          onClick={handleNewConversation}
+          className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent"
         >
-          {generatingArcs ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
-          {generatingArcs ? "Forging arcs…" : "Generate Story Arcs"}
+          <MessagesSquare className="size-4" />
+          New Conversation
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent"
+        >
+          <Pencil className="size-4" />
+          Edit
         </button>
       </div>
 
-      {/* Story Arcs (Character Story Nodes) */}
-      <section className="mb-6">
-        <div className="mb-2 flex items-center gap-2">
-          <BookMarked className="size-4 text-primary" />
-          <h2 className="text-sm font-medium">
-            Story Arcs ({arcs.length})
-          </h2>
-        </div>
-        {arcs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/30 p-5 text-center">
-            <p className="text-xs text-muted-foreground">
-              No story arcs yet. Generate distinct scenarios with Grok, then
-              pick one to begin.
-            </p>
+      {threads.length > 0 && (
+        <section className="mb-6">
+          <div className="mb-2 flex items-center gap-2">
+            <MessagesSquare className="size-4 text-primary" />
+            <h2 className="text-sm font-medium">
+              Conversations ({threads.length})
+            </h2>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {arcs.map((node) => (
-              <div
-                key={node.id}
-                className="group relative flex flex-col rounded-xl border border-border/30 bg-card p-3 transition-colors hover:border-primary/40"
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {threads.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setActiveThreadId(t.id);
+                  selectCharacter(character);
+                }}
+                className="divine-card group flex items-center gap-3 rounded-xl p-3 text-left"
               >
-                <div className="mb-1.5 flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold leading-tight">
-                    {node.title}
-                  </h3>
-                  {node.tone && (
-                    <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">
-                      {node.tone}
-                    </span>
-                  )}
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <MessagesSquare className="size-4" />
                 </div>
-                <p className="mb-3 line-clamp-3 flex-1 text-[11px] leading-relaxed text-muted-foreground">
-                  {node.summary || node.scenario || "No description"}
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => beginArc(node)}
-                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                  >
-                    <Play className="size-3" />
-                    Begin Arc
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteStoryNode(node.id)}
-                    className="rounded-lg p-1.5 text-muted-foreground/50 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                    title="Delete arc"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{t.title}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Continue this thread
+                  </p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <div className="space-y-4">
         <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">
+          <h2 className="mb-2 text-sm font-medium text-muted-foreground">
             Personality
           </h2>
-          <p className="text-sm whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-sm">
             {character.personality || "No personality defined"}
           </p>
         </section>
 
         <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">
+          <h2 className="mb-2 text-sm font-medium text-muted-foreground">
             Scenario
           </h2>
-          <p className="text-sm whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-sm">
             {character.scenario || "No scenario defined"}
           </p>
         </section>
 
         <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2">
+          <h2 className="mb-2 text-sm font-medium text-muted-foreground">
             First Message
           </h2>
           <div className="rounded-lg bg-muted/50 p-3 text-sm italic">
@@ -470,15 +368,16 @@ function CharacterDetailView({
 
         {character.images.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-muted-foreground mb-2">
+            <h2 className="mb-2 text-sm font-medium text-muted-foreground">
               Gallery ({character.images.length})
             </h2>
             <div className="grid grid-cols-3 gap-2">
               {character.images.map((img, i) => (
                 <div
-                  key={i}
+                  key={`${img.url}-${i}`}
                   className="aspect-square overflow-hidden rounded-lg bg-muted"
                 >
+                  {/* biome-ignore lint/performance/noImgElement: gallery thumb */}
                   <img
                     src={img.url}
                     alt={img.caption || `Gallery ${i + 1}`}
@@ -491,5 +390,240 @@ function CharacterDetailView({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * CharacterEditView — edit an existing character, including AVATAR UPLOAD via
+ * file picker (uploads to the R2-backed /api/upload route). This is the "edit
+ * section" avatar upload the user asked for.
+ */
+function CharacterEditView({
+  character,
+  onClose,
+  onSave,
+}: {
+  character: Character;
+  onClose: () => void;
+  onSave: (patch: Partial<Character>) => void;
+}) {
+  const [name, setName] = useState(character.name);
+  const [description, setDescription] = useState(character.description);
+  const [personality, setPersonality] = useState(character.personality);
+  const [scenario, setScenario] = useState(character.scenario);
+  const [firstMes, setFirstMes] = useState(character.firstMes);
+  const [tags, setTags] = useState(character.tags.join(", "));
+  const [avatar, setAvatar] = useState(character.avatar ?? "");
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    setAvatarUploading(true);
+    // Optimistic local preview while the upload completes.
+    const localPreview = URL.createObjectURL(file);
+    setAvatar(localPreview);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`,
+        { method: "POST", body: formData }
+      );
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      if (!data?.url) throw new Error("Upload failed");
+      setAvatar(data.url);
+      toast.success("Avatar uploaded");
+    } catch {
+      setAvatar(character.avatar ?? "");
+      toast.error("Failed to upload avatar");
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+
+  const handleSave = () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    onSave({
+      name: name.trim(),
+      description,
+      personality,
+      scenario,
+      firstMes,
+      avatar: avatar || undefined,
+      tags: tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+    });
+  };
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <h1 className="text-xl font-bold tracking-tight">Edit Character</h1>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      {/* Avatar upload */}
+      <section className="mb-6">
+        <h2 className="mb-2.5 text-sm font-medium text-muted-foreground">
+          Avatar
+        </h2>
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0">
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-primary/40 via-fuchsia-500/25 to-transparent blur-md" />
+            <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60">
+              {avatarUploading ? (
+                <Loader2 className="size-6 animate-spin text-primary" />
+              ) : avatar ? (
+                // biome-ignore lint/performance/noImgElement: avatar preview
+                <img
+                  src={avatar}
+                  alt="Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-3xl font-bold">
+                  {name.charAt(0) || "?"}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarSelected}
+            />
+            <button
+              type="button"
+              disabled={avatarUploading}
+              onClick={() => avatarInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent disabled:opacity-50"
+            >
+              {avatarUploading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Upload className="size-4" />
+              )}
+              {avatarUploading ? "Uploading…" : "Upload image"}
+            </button>
+            <p className="text-[11px] text-muted-foreground">
+              Or paste an image URL below.
+            </p>
+            <input
+              value={avatar}
+              onChange={(e) => setAvatar(e.target.value)}
+              placeholder="https://…"
+              className="w-72 rounded-md border border-border/40 bg-background px-2.5 py-1.5 text-xs"
+            />
+          </div>
+        </div>
+      </section>
+
+      <div className="grid max-w-2xl gap-4">
+        <Field label="Name">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Description">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Personality">
+          <textarea
+            value={personality}
+            onChange={(e) => setPersonality(e.target.value)}
+            rows={3}
+            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Scenario">
+          <textarea
+            value={scenario}
+            onChange={(e) => setScenario(e.target.value)}
+            rows={3}
+            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="First Message">
+          <textarea
+            value={firstMes}
+            onChange={(e) => setFirstMes(e.target.value)}
+            rows={3}
+            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Tags (comma separated)">
+          <input
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-6 flex max-w-2xl justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-xl border border-border/40 px-4 py-2 text-sm font-medium hover:bg-accent"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="divine-glow-btn rounded-xl px-5 py-2 text-sm font-semibold"
+        >
+          Save changes
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }

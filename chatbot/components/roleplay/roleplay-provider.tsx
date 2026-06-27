@@ -301,6 +301,47 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     setSelectedCharacter((prev) => (prev?.id === id ? null : prev));
   }, []);
 
+  const handleUpdateCharacter = useCallback(
+    (id: string, patch: Partial<Character>) => {
+      let nextChar: Character | null = null;
+      setCharacters((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== id) return c;
+          const merged = { ...c, ...patch };
+          nextChar = merged;
+          return merged;
+        });
+        saveJSON(STORAGE_KEY_CHARACTERS, updated);
+        return updated;
+      });
+      // Keep the selected character + the chat's active-character payload in
+      // sync so edits (e.g. a new avatar or name) take effect immediately.
+      setSelectedCharacter((prev) => {
+        if (prev?.id !== id || !nextChar) return prev;
+        if (typeof window !== "undefined") {
+          const c = nextChar;
+          localStorage.setItem(
+            "divine_active_character",
+            JSON.stringify({
+              name: c.name,
+              description: c.description,
+              personality: c.personality,
+              scenario: c.scenario,
+              first_mes: c.firstMes,
+              mes_example: c.mesExample,
+              system_prompt: c.systemPrompt,
+              tags: c.tags,
+              avatar: c.avatar,
+              images: c.images,
+            })
+          );
+        }
+        return nextChar;
+      });
+    },
+    []
+  );
+
   const handleAddLoreEntry = useCallback((entry: LoreEntry) => {
     setLoreEntries((prev) => {
       const updated = [...prev, entry];
@@ -468,6 +509,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       setCurrentView,
       importCharacter: handleImportCharacter,
       selectCharacter: handleSelectCharacter,
+      updateCharacter: handleUpdateCharacter,
       deleteCharacter: handleDeleteCharacter,
       addLoreEntry: handleAddLoreEntry,
       updateLoreEntry: handleUpdateLoreEntry,
@@ -492,7 +534,8 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     [
       characters, selectedCharacter, loreEntries, loreBooks, storyNodes,
       currentView, galleryMedia, galleryItems, divinityAI, loreDetection,
-      handleImportCharacter, handleSelectCharacter, handleDeleteCharacter,
+      handleImportCharacter, handleSelectCharacter, handleUpdateCharacter,
+      handleDeleteCharacter,
       handleAddLoreEntry, handleUpdateLoreEntry, handleDeleteLoreEntry,
       handleAddStoryNode, handleUpdateStoryNode, handleDeleteStoryNode,
       handleAddGalleryItems, handleClearGalleryItems,
