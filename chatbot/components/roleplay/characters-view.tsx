@@ -5,6 +5,11 @@ import { CharacterForger } from "./character-forger";
 import { nanoid } from "nanoid";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { type ActiveArc, saveActiveArc } from "@/lib/active-arc";
+import {
+  createArcThread,
+  setActiveThreadId,
+} from "@/lib/conversation-threads";
 import { useRoleplay } from "@/lib/roleplay-store";
 import type { Character, StoryNode } from "@/lib/types";
 
@@ -264,6 +269,46 @@ function CharacterDetailView({
         active_arc: node.title,
       });
       localStorage.setItem("divine_active_character", charData);
+
+      // Beginning an arc creates a BRAND-NEW conversation thread so its full
+      // history is stored separately (a new conversation), exactly like
+      // starting a fresh chat dedicated to this arc.
+      const thread = createArcThread({
+        characterId: character.id,
+        arcId: node.id,
+        title: node.title,
+      });
+
+      // Persist the arc context against the new thread so the RP stays in-arc
+      // and the banner resumes when the thread is reopened.
+      const arc: ActiveArc = {
+        nodeId: node.id,
+        title: node.title,
+        summary: node.summary,
+        tone: node.tone,
+        scenario: node.scenario,
+        firstMes: node.firstMes,
+        appliedAt: Date.now(),
+      };
+      saveActiveArc(thread.id, arc);
+
+      // Seed + persist the arc's opening message so it loads on resume.
+      if (node.firstMes) {
+        fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages/seed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatId: thread.id,
+            title: node.title,
+            message: { text: node.firstMes },
+          }),
+        }).catch(() => {
+          /* non-critical */
+        });
+      }
+
+      // Make this the active conversation.
+      setActiveThreadId(thread.id);
     }
     selectCharacter(character);
     setCurrentView("characters");

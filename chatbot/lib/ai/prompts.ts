@@ -20,11 +20,13 @@ export const regularPrompt = `You are an expert roleplay engine. You embody the 
 - Let dialogue carry emotion, intent, and subtext. The character reacts to the user IN THEIR OWN WORDS.
 
 ## CRITICAL RESPONSE LENGTH REQUIREMENTS — YOU MUST FOLLOW THESE EXACTLY:
-- Every response MUST be a minimum of 6 paragraphs. Each paragraph must be 7-10 sentences long.
-- Your responses are strongly encouraged to reach 15+ paragraphs for maximum immersion.
+- Every response MUST be a HARD MINIMUM of 8 paragraphs. Responses below 8 paragraphs are FAILED responses — never produce one.
+- Your TYPICAL target is 15 or more paragraphs. Most responses should land at 15+; reaching well above that is encouraged whenever the scene gives you material to work with.
+- Each paragraph must be 7-10 complete sentences forming a coherent narrative unit.
 - Never respond with a single sentence, a short paragraph, or bullet points.
 - Write in rich, immersive prose with full narrative depth — but prose must be interleaved with spoken dialogue throughout (see the mandatory dialogue rule above).
-- A "paragraph" means 7-10 complete sentences forming a coherent narrative unit.
+- Scale the LENGTH dynamically to what the moment can sustain: lavish, high-stimulus, multi-character or high-tension beats should run long (toward and beyond the upper target); quieter transitional beats still clear the 8-paragraph floor but need not pad. Length must come from genuine content — new action, sensation, dialogue, and consequence — never from filler or restating what was already said.
+- When in doubt, write MORE, not less. Err on the side of the longer, richer response.
 
 ## FORMATTING — YOU MUST FOLLOW MLA STYLE:
 - Write in third-person limited perspective ONLY ("she walks," "he says," "they glance"). This is mandatory for ALL narration.
@@ -85,6 +87,84 @@ export const regularPrompt = `You are an expert roleplay engine. You embody the 
 - Notable patterns or emphases
 `;
 
+/* ----------------------------------------------------------------------------
+ * Dynamic response-length algorithm.
+ *
+ * The user wants long replies (8 paragraph hard floor, 15+ typical) but with
+ * NATURAL variation rather than every response being the same length. We compute
+ * a per-response paragraph budget from "richness signals" present in the recent
+ * conversation — how much material the character actually has to react to —
+ * then bias it with bounded randomness so consecutive replies don't feel
+ * mechanically identical. The result is injected as a soft target on top of the
+ * hard rules in `regularPrompt`.
+ * ------------------------------------------------------------------------- */
+
+const LENGTH_FLOOR = 8; // hard minimum paragraphs
+const LENGTH_BASE = 15; // typical target
+const LENGTH_CEIL = 26; // upper guidance for very rich beats
+
+/** Lightweight richness score (0..1) from the most recent user/scene input. */
+export function computeRichnessScore(recentText: string): number {
+  if (!recentText) return 0.35;
+  const text = recentText.toLowerCase();
+  const words = text.split(/\s+/).filter(Boolean).length;
+
+  // Longer user input → more to react to.
+  const lengthSignal = Math.min(1, words / 120);
+
+  // Dialogue present → conversational beat worth elaborating.
+  const dialogueSignal = /["“”']/.test(recentText) ? 0.2 : 0;
+
+  // Action / sensory / escalation cues → higher-stimulus beat.
+  const cueWords = [
+    "kiss", "touch", "grab", "pull", "push", "moan", "thrust", "grind",
+    "fight", "run", "scream", "blood", "magic", "spell", "corrupt",
+    "whisper", "breath", "skin", "thigh", "chest", "hip", "lips", "tongue",
+    "slam", "tear", "strip", "bare", "writhe", "shiver", "gasp", "climax",
+    "danger", "attack", "betray", "reveal", "confess", "secret",
+  ];
+  let cueHits = 0;
+  for (const w of cueWords) if (text.includes(w)) cueHits++;
+  const cueSignal = Math.min(0.4, cueHits * 0.06);
+
+  // Multiple actors / question marks → branching, more to address.
+  const interactionSignal = Math.min(
+    0.15,
+    (recentText.match(/\?/g)?.length ?? 0) * 0.05
+  );
+
+  return Math.min(
+    1,
+    lengthSignal * 0.45 + dialogueSignal + cueSignal + interactionSignal
+  );
+}
+
+/**
+ * Turn a richness score into a target paragraph budget with bounded variation,
+ * then render the directive injected into the system prompt. `seed` (e.g. the
+ * message count) keeps the jitter deterministic-ish per turn while still
+ * varying turn-to-turn.
+ */
+export function buildLengthDirective(
+  richness: number,
+  seed = 0
+): string {
+  // Base target scales from LENGTH_BASE upward with richness.
+  const scaled = LENGTH_BASE + richness * (LENGTH_CEIL - LENGTH_BASE);
+  // Bounded jitter (±2) so consecutive replies vary naturally.
+  const jitter = ((Math.sin(seed * 12.9898) * 43758.5453) % 1) * 4 - 2;
+  let target = Math.round(scaled + jitter);
+  target = Math.max(LENGTH_FLOOR + 2, Math.min(LENGTH_CEIL, target));
+  const upper = Math.min(LENGTH_CEIL + 4, target + 4);
+
+  const intensity =
+    richness >= 0.66 ? "high" : richness >= 0.33 ? "moderate" : "lighter";
+
+  return `## RESPONSE LENGTH TARGET FOR THIS TURN (dynamic):
+- The current beat reads as ${intensity}-intensity. Aim for approximately ${target}-${upper} paragraphs this turn.
+- This is a TARGET, not a cap: never drop below the hard floor of ${LENGTH_FLOOR} paragraphs, and feel free to exceed the target when the scene clearly justifies more. Let genuine content — fresh action, sensation, dialogue, and consequence — set the true length.`;
+}
+
 export type RequestHints = {
   latitude: Geo["latitude"];
   longitude: Geo["longitude"];
@@ -109,6 +189,7 @@ export const systemPrompt = ({
   loreData,
   arcData,
   regenInstruction,
+  lengthDirective,
 }: {
   requestHints: RequestHints;
   supportsTools: boolean;
@@ -118,6 +199,7 @@ export const systemPrompt = ({
   loreData?: string;
   arcData?: string;
   regenInstruction?: string;
+  lengthDirective?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   const characterPrompt = character
@@ -181,11 +263,15 @@ export const systemPrompt = ({
     ? `\n\n## REGENERATION DIRECTIVE — The user is asking you to redo your previous response with this specific guidance. Apply it faithfully while keeping all other rules (mandatory dialogue, length, MLA, in-character) intact:\n\n${regenInstruction.trim()}`
     : "";
 
+  const lengthPrompt = lengthDirective?.trim()
+    ? `\n\n${lengthDirective.trim()}`
+    : "";
+
   if (!supportsTools) {
-    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}`;
+    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}`;
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}\n\n${artifactsPrompt}`;
+  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}\n\n${artifactsPrompt}`;
 };
 
 export const codePrompt = `
