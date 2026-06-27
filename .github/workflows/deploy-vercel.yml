@@ -1,0 +1,43 @@
+name: Deploy to Vercel
+
+# DivinityRP is a server-rendered Next.js app (live API routes, Postgres,
+# auth, xAI streaming). It CANNOT run on GitHub Pages (static-only hosting),
+# so production deploys target Vercel — the platform this template is built for.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only runs when the Vercel secrets are configured in the repo settings.
+    if: ${{ vars.ENABLE_VERCEL_DEPLOY == 'true' }}
+    defaults:
+      run:
+        working-directory: chatbot
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: chatbot/pnpm-lock.yaml
+
+      - name: Install Vercel CLI
+        run: pnpm add -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
