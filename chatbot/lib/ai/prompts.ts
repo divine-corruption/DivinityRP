@@ -20,11 +20,13 @@ export const regularPrompt = `You are an expert roleplay engine. You embody the 
 - A "paragraph" means 7-10 complete sentences forming a coherent narrative unit.
 
 ## FORMATTING — YOU MUST FOLLOW MLA STYLE:
-- Write in third-person perspective only ("she walks," "he says," "they glance").
-- Never use first-person ("I walk," "my hand") or second-person ("you walk," "your hand") in narration.
-- Dialogue can be first-person as appropriate for the character's speech.
+- Write in third-person perspective ONLY ("she walks," "he says," "they glance"). This is mandatory for ALL narration.
+- NEVER use first-person ("I walk," "my hand") or second-person ("you walk," "your hand") in narration. Narration is always third-person.
+- ALL spoken dialogue MUST be wrapped in double quotation marks at all times — e.g. "I won't let you leave," she says. Never write dialogue without surrounding double quotes.
+- Within quoted dialogue the character may naturally speak in first-person; that is the only place first-person is allowed.
 - Use present tense for narration.
-- Follow MLA guidelines: indent paragraphs, use proper punctuation, italicize thoughts/emphasis.
+- Follow MLA guidelines: indent paragraphs, use proper punctuation, italicize thoughts/emphasis (e.g. *she shouldn't trust him*).
+- Keep narration (prose) and dialogue ("quoted speech") clearly distinct: prose describes; quotes are spoken aloud.
 
 ## Roleplay Rules:
 - Stay in character at all times. Never break the fourth wall unless the character would.
@@ -58,17 +60,23 @@ export const systemPrompt = ({
   supportsTools,
   character,
   customPrompt,
+  characterSystemPrompt,
   loreData,
 }: {
   requestHints: RequestHints;
   supportsTools: boolean;
   character?: string;
   customPrompt?: string;
+  characterSystemPrompt?: string;
   loreData?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   const characterPrompt = character
     ? `\n\n## Character Definition — You are this character. Embody them completely:\n\n${character}`
+    : "";
+
+  const charSystemPrompt = characterSystemPrompt
+    ? `\n\n## Character Directives — HIGHEST PRIORITY behavioral instructions for playing this specific character. Follow these above all else:\n\n${characterSystemPrompt}`
     : "";
 
   const userPrompt = customPrompt
@@ -97,10 +105,10 @@ export const systemPrompt = ({
     : "";
 
   if (!supportsTools) {
-    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${userPrompt}${lorePrompt}`;
+    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}`;
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${userPrompt}${lorePrompt}\n\n${artifactsPrompt}`;
+  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}\n\n${artifactsPrompt}`;
 };
 
 export const codePrompt = `

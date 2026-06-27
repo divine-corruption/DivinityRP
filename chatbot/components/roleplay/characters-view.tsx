@@ -257,6 +257,7 @@ function CharacterDetailView({
         scenario: node.scenario || character.scenario,
         first_mes: node.firstMes || character.firstMes,
         mes_example: character.mesExample,
+        system_prompt: character.systemPrompt,
         tags: character.tags,
         avatar: character.avatar,
         images: character.images,

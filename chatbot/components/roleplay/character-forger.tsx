@@ -54,8 +54,42 @@ export function CharacterForger() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [forging, setForging] = useState(false);
   const [result, setResult] = useState<ForgedCharacter | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeSceneRef = useRef<string>("");
+
+  const handleGenerateSystemPrompt = async () => {
+    if (!result) return;
+    setGeneratingPrompt(true);
+    try {
+      const res = await fetch("/api/system-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: result.name,
+          description: result.description,
+          personality: result.personality,
+          scenario: result.scenario,
+          tags: result.tags,
+          mesExample: result.mes_example,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Generation failed");
+      }
+      const data = await res.json();
+      setSystemPrompt(data.systemPrompt ?? "");
+      toast.success("System prompt generated");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to generate system prompt"
+      );
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  };
 
   const triggerUpload = (scene: string) => {
     activeSceneRef.current = scene;
@@ -145,6 +179,7 @@ export function CharacterForger() {
 
       const data: ForgedCharacter = await res.json();
       setResult(data);
+      setSystemPrompt(data.system_prompt_override ?? "");
       toast.success(`Forged: ${data.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Forging failed");
@@ -163,6 +198,7 @@ export function CharacterForger() {
       first_mes: result.first_mes,
       mes_example: result.mes_example,
       tags: result.tags,
+      system_prompt: systemPrompt || result.system_prompt_override,
       system_prompt_override: result.system_prompt_override,
       alternate_greetings: result.alternate_greetings,
       creator_notes: result.creator_notes,
@@ -193,6 +229,7 @@ export function CharacterForger() {
       scenario: result.scenario,
       first_mes: result.first_mes,
       mes_example: result.mes_example,
+      system_prompt: systemPrompt || result.system_prompt_override,
       tags: result.tags,
       avatar: result.image_analysis[0]?.url,
       images: result.image_analysis.map((ia) => ({
@@ -480,6 +517,40 @@ export function CharacterForger() {
                     <p className="mt-0.5 whitespace-pre-wrap">{result.scenario}</p>
                   </div>
                 )}
+
+                {/* Editable per-character system prompt + xAI generator */}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      System Prompt
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGenerateSystemPrompt}
+                      disabled={generatingPrompt}
+                      className="inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
+                      title="Generate a system prompt with xAI from this character's details"
+                    >
+                      {generatingPrompt ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3" />
+                      )}
+                      {generatingPrompt ? "Generating…" : "Generate with xAI"}
+                    </button>
+                  </div>
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    placeholder="Directorial instructions for how the AI should portray this character. Click 'Generate with xAI' to draft one, or write your own."
+                    rows={6}
+                    className="mt-1 w-full resize-y rounded-lg border border-border/30 bg-background px-3 py-2 text-xs"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Saved with the character and injected as high-priority guidance during chat.
+                  </p>
+                </div>
+
                 {result.first_mes && (
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">First Message</span>
