@@ -301,6 +301,64 @@ const PurePreviewMessage = ({
       );
     }
 
+    if (type === "tool-imagineImage") {
+      const { toolCallId, state } = part;
+
+      if (state === "input-available" || state === "input-streaming") {
+        return (
+          <div
+            className="flex w-[min(100%,360px)] animate-pulse flex-col items-center justify-center gap-2 rounded-xl border border-border/30 bg-muted/40 p-8"
+            key={toolCallId}
+          >
+            <SparklesIcon size={20} />
+            <span className="text-muted-foreground text-xs">
+              Imagining image…
+            </span>
+          </div>
+        );
+      }
+
+      if (state === "output-available") {
+        const output = part.output as
+          | { url?: string; prompt?: string; error?: string }
+          | undefined;
+
+        if (output?.error) {
+          return (
+            <div
+              className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-500 text-sm dark:bg-red-950/50"
+              key={toolCallId}
+            >
+              Image generation failed: {output.error}
+            </div>
+          );
+        }
+
+        if (output?.url) {
+          return (
+            <figure
+              className="w-[min(100%,420px)] overflow-hidden rounded-xl border border-border/30 bg-card"
+              key={toolCallId}
+            >
+              {/* biome-ignore lint/performance/noImgElement: external generated URL */}
+              <img
+                alt={output.prompt ?? "Generated image"}
+                className="w-full object-cover"
+                src={output.url}
+              />
+              {output.prompt && (
+                <figcaption className="px-3 py-2 text-[11px] text-muted-foreground">
+                  {output.prompt}
+                </figcaption>
+              )}
+            </figure>
+          );
+        }
+      }
+
+      return null;
+    }
+
     return null;
   });
 

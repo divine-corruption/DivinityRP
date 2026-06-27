@@ -3,7 +3,7 @@
 import { nanoid } from "nanoid";
 import { useCallback, useMemo, useState } from "react";
 import { RoleplayCtx } from "@/lib/roleplay-store";
-import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, SidebarView, StoryNode } from "@/lib/types";
+import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
 
 function parseSillyTavern(data: Record<string, unknown>): Character {
   const char: Record<string, unknown> = (data?.data as Record<string, unknown> | undefined) || data;
@@ -116,6 +116,7 @@ const STORAGE_KEY_CHARACTERS = "divine_characters";
 const STORAGE_KEY_LORE = "divine_lore";
 const STORAGE_KEY_NODES = "divine_nodes";
 const STORAGE_KEY_LOREBOOKS = "divine_lorebooks";
+const STORAGE_KEY_GALLERY = "divine_gallery";
 
 function loadJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -167,6 +168,9 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     url: string;
     type: "image" | "video";
   } | null>(null);
+  const [galleryItems, setGalleryItems] = useState<MediaItem[]>(() =>
+    loadJSON<MediaItem[]>(STORAGE_KEY_GALLERY, [])
+  );
   const [divinityAI, setDivinityAIState] = useState<DivinityAIState>(defaultDivinityAI);
   const [loreDetection, setLoreDetectionState] = useState<LoreDetection>(defaultLoreDetection);
 
@@ -251,6 +255,42 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const handleUpdateStoryNode = useCallback(
+    (id: string, node: Partial<StoryNode>) => {
+      setStoryNodes((prev) => {
+        const updated = prev.map((n) => (n.id === id ? { ...n, ...node } : n));
+        saveJSON(STORAGE_KEY_NODES, updated);
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleDeleteStoryNode = useCallback((id: string) => {
+    setStoryNodes((prev) => {
+      const updated = prev.filter((n) => n.id !== id);
+      saveJSON(STORAGE_KEY_NODES, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleAddGalleryItems = useCallback((items: MediaItem[]) => {
+    if (items.length === 0) return;
+    setGalleryItems((prev) => {
+      const seen = new Set(prev.map((m) => m.url));
+      const fresh = items.filter((m) => m.url && !seen.has(m.url));
+      if (fresh.length === 0) return prev;
+      const updated = [...prev, ...fresh];
+      saveJSON(STORAGE_KEY_GALLERY, updated);
+      return updated;
+    });
+  }, []);
+
+  const handleClearGalleryItems = useCallback(() => {
+    setGalleryItems([]);
+    saveJSON(STORAGE_KEY_GALLERY, []);
+  }, []);
+
   // LoreBook handlers
   const handleAddLoreBook = useCallback((book: LoreBook) => {
     setLoreBooks((prev) => {
@@ -327,6 +367,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       storyNodes,
       currentView,
       galleryMedia,
+      galleryItems,
       divinityAI,
       loreDetection,
       setCurrentView,
@@ -337,7 +378,11 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       updateLoreEntry: handleUpdateLoreEntry,
       deleteLoreEntry: handleDeleteLoreEntry,
       addStoryNode: handleAddStoryNode,
+      updateStoryNode: handleUpdateStoryNode,
+      deleteStoryNode: handleDeleteStoryNode,
       setGalleryMedia,
+      addGalleryItems: handleAddGalleryItems,
+      clearGalleryItems: handleClearGalleryItems,
       addLoreBook: handleAddLoreBook,
       updateLoreBook: handleUpdateLoreBook,
       deleteLoreBook: handleDeleteLoreBook,
@@ -350,10 +395,11 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       characters, selectedCharacter, loreEntries, loreBooks, storyNodes,
-      currentView, galleryMedia, divinityAI, loreDetection,
+      currentView, galleryMedia, galleryItems, divinityAI, loreDetection,
       handleImportCharacter, handleSelectCharacter, handleDeleteCharacter,
       handleAddLoreEntry, handleUpdateLoreEntry, handleDeleteLoreEntry,
-      handleAddStoryNode,
+      handleAddStoryNode, handleUpdateStoryNode, handleDeleteStoryNode,
+      handleAddGalleryItems, handleClearGalleryItems,
       handleAddLoreBook, handleUpdateLoreBook, handleDeleteLoreBook,
       handleSetDivinityAI, handleAddDivinitySuggestion,
       handleRemoveDivinitySuggestion, handleClearDivinitySuggestions,

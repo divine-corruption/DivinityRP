@@ -45,7 +45,7 @@ export function DashboardView() {
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold">DIVINE</h1>
           <p className="mt-2 text-muted-foreground">
-            Immersive AI roleplay engine powered by Grok 4.3
+            Immersive AI roleplay engine — powered by xAI Grok 4.3
           </p>
         </div>
 
