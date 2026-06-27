@@ -36,6 +36,7 @@ export const postRequestBodySchema = z.object({
   characterData: z.string().optional(),
   loreData: z.string().optional(),
   arcData: z.string().optional(),
+  regenInstruction: z.string().max(2000).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;
