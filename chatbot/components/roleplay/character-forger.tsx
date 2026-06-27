@@ -55,6 +55,7 @@ export function CharacterForger() {
   const [forging, setForging] = useState(false);
   const [result, setResult] = useState<ForgedCharacter | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeSceneRef = useRef<string>("");
@@ -180,6 +181,7 @@ export function CharacterForger() {
       const data: ForgedCharacter = await res.json();
       setResult(data);
       setSystemPrompt(data.system_prompt_override ?? "");
+      setAvatarUrl(data.image_analysis?.[0]?.url ?? "");
       toast.success(`Forged: ${data.name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Forging failed");
@@ -202,7 +204,7 @@ export function CharacterForger() {
       system_prompt_override: result.system_prompt_override,
       alternate_greetings: result.alternate_greetings,
       creator_notes: result.creator_notes,
-      avatar: result.image_analysis[0]?.url,
+      avatar: avatarUrl || result.image_analysis[0]?.url,
       images: result.image_analysis.map((ia) => ({
         url: ia.url,
         caption: `${ia.scene}: ${ia.description.slice(0, 100)}`,
@@ -231,7 +233,7 @@ export function CharacterForger() {
       mes_example: result.mes_example,
       system_prompt: systemPrompt || result.system_prompt_override,
       tags: result.tags,
-      avatar: result.image_analysis[0]?.url,
+      avatar: avatarUrl || result.image_analysis[0]?.url,
       images: result.image_analysis.map((ia) => ({
         url: ia.url,
         caption: `${ia.scene}: ${ia.description.slice(0, 80)}`,
@@ -517,6 +519,41 @@ export function CharacterForger() {
                     <p className="mt-0.5 whitespace-pre-wrap">{result.scenario}</p>
                   </div>
                 )}
+
+                {/* Editable per-character avatar (shown next to chat responses) */}
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Avatar
+                  </span>
+                  <div className="mt-1 flex items-center gap-3">
+                    <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/60 ring-1 ring-border/50">
+                      {avatarUrl ? (
+                        // biome-ignore lint/performance/noImgElement: character avatar URL
+                        <img
+                          alt={result.name}
+                          className="h-full w-full object-cover"
+                          src={avatarUrl}
+                        />
+                      ) : (
+                        <span className="font-bold text-muted-foreground text-sm">
+                          {result.name?.charAt(0).toUpperCase() ?? "?"}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      className="min-w-0 flex-1 rounded-lg border border-border/30 bg-background px-3 py-2 text-xs"
+                      onChange={(e) => setAvatarUrl(e.target.value)}
+                      placeholder="https://… image URL for this character's avatar"
+                      type="url"
+                      value={avatarUrl}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Appears next to this character's responses (with their name).
+                    Defaults to the first imported image; paste any image URL to
+                    override.
+                  </p>
+                </div>
 
                 {/* Editable per-character system prompt + xAI generator */}
                 <div>
