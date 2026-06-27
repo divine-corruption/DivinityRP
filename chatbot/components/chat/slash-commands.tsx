@@ -2,6 +2,7 @@
 
 import {
   BombIcon,
+  DownloadIcon,
   ListIcon,
   PaletteIcon,
   PenLineIcon,
@@ -38,6 +39,12 @@ export const slashCommands: SlashCommand[] = [
     description: "Rename current chat",
     icon: <PenLineIcon className="size-3.5" />,
     action: "rename",
+  },
+  {
+    name: "export",
+    description: "Export this conversation to R2",
+    icon: <DownloadIcon className="size-3.5" />,
+    action: "export",
   },
   {
     name: "model",

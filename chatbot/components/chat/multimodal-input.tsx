@@ -165,6 +165,40 @@ function PureMultimodalInput({
       case "rename":
         toast("Rename is available from the sidebar chat menu.");
         break;
+      case "export": {
+        toast.promise(
+          (async () => {
+            const res = await fetch(
+              `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/chat/export`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chatId }),
+              }
+            );
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error ?? "Export failed");
+            }
+            const data = await res.json();
+            return data.url as string;
+          })(),
+          {
+            loading: "Exporting conversation to R2…",
+            success: (url: string) => {
+              toast("Conversation exported to R2", {
+                action: {
+                  label: "Open",
+                  onClick: () => window.open(url, "_blank"),
+                },
+              });
+              return "Conversation exported to R2";
+            },
+            error: (e) => (e instanceof Error ? e.message : "Export failed"),
+          }
+        );
+        break;
+      }
       case "model": {
         const modelBtn = document.querySelector<HTMLButtonElement>(
           "[data-testid='model-selector']"
