@@ -187,6 +187,8 @@ export const systemPrompt = ({
   character,
   customPrompt,
   characterSystemPrompt,
+  globalSystemPrompt,
+  memoryData,
   loreData,
   arcData,
   regenInstruction,
@@ -197,6 +199,8 @@ export const systemPrompt = ({
   character?: string;
   customPrompt?: string;
   characterSystemPrompt?: string;
+  globalSystemPrompt?: string;
+  memoryData?: string;
   loreData?: string;
   arcData?: string;
   regenInstruction?: string;
@@ -211,6 +215,14 @@ export const systemPrompt = ({
     ? `\n\n## Character Directives — HIGHEST PRIORITY behavioral instructions for playing this specific character. Follow these above all else:\n\n${characterSystemPrompt}`
     : "";
 
+  const globalPrompt = globalSystemPrompt?.trim()
+    ? `\n\n## Global Directives — Universal rules that apply to every conversation in this engine:\n\n${globalSystemPrompt.trim()}`
+    : "";
+
+  const memoryPrompt = memoryData?.trim()
+    ? `\n\n## Character Memory — This is what you (the character) remember from PAST conversations with the user. Treat it as established history you genuinely recall. Reference it naturally when relevant; never contradict it or claim you don't remember it:\n\n${memoryData.trim()}`
+    : "";
+
   const userPrompt = customPrompt
     ? `\n\n## User's Custom Instructions:\n\n${customPrompt}`
     : "";
@@ -218,12 +230,17 @@ export const systemPrompt = ({
   let loreText = "";
   if (loreData) {
     try {
-      const entries = JSON.parse(loreData) as { title: string; content: string; keys?: string[] }[];
+      const entries = JSON.parse(loreData) as {
+        title: string;
+        content: string;
+        keys?: string[];
+        importance?: number;
+      }[];
       if (Array.isArray(entries) && entries.length > 0) {
         loreText = entries
           .map(
             (e, i) =>
-              `${i + 1}. ${e.title}${e.keys?.length ? ` [Keywords: ${e.keys.join(", ")}]` : ""}\n${e.content}`
+              `${i + 1}. ${e.title}${typeof e.importance === "number" ? ` (priority ${e.importance})` : ""}${e.keys?.length ? ` [Keywords: ${e.keys.join(", ")}]` : ""}\n${e.content}`
           )
           .join("\n\n");
       }
@@ -269,10 +286,10 @@ export const systemPrompt = ({
     : "";
 
   if (!supportsTools) {
-    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}`;
+    return `${regularPrompt}${globalPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${memoryPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}`;
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}\n\n${artifactsPrompt}`;
+  return `${regularPrompt}${globalPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${memoryPrompt}${userPrompt}${lorePrompt}${arcPrompt}${regenPrompt}${lengthPrompt}\n\n${artifactsPrompt}`;
 };
 
 export const codePrompt = `

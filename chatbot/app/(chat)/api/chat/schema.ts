@@ -35,6 +35,8 @@ export const postRequestBodySchema = z.object({
   customPrompt: z.string().optional(),
   characterData: z.string().optional(),
   loreData: z.string().optional(),
+  memoryData: z.string().max(20000).optional(),
+  globalSystemPrompt: z.string().max(8000).optional(),
   arcData: z.string().optional(),
   regenInstruction: z.string().max(2000).optional(),
 });

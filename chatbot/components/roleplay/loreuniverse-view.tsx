@@ -311,6 +311,7 @@ export function LoreUniverseView() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [keys, setKeys] = useState("");
+  const [importance, setImportance] = useState(5);
   const [characterId, setCharacterId] = useState("");
 
   // DivinityAI chat
@@ -526,6 +527,7 @@ export function LoreUniverseView() {
       title: title.trim(),
       content: content.trim(),
       keys: keys.split(",").map((k) => k.trim()).filter(Boolean),
+      importance,
       characterId: characterId || undefined,
       lorebookId: divinityAI.selectedLorebookId ?? undefined,
       approved: true,
@@ -536,6 +538,7 @@ export function LoreUniverseView() {
     setTitle("");
     setContent("");
     setKeys("");
+    setImportance(5);
     setCharacterId("");
     setShowForm(false);
     toast.success("Lore entry added");
@@ -779,6 +782,24 @@ export function LoreUniverseView() {
             onChange={(e) => setKeys(e.target.value)}
             className="w-full rounded-lg border border-border/30 bg-background px-3 py-2 text-sm"
           />
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Importance</span>
+              <span className="font-semibold text-primary">{importance}</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={importance}
+              onChange={(e) => setImportance(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              Higher importance lore is injected first and survives the
+              auto-inject threshold in Settings.
+            </p>
+          </div>
           {loreBooks.length > 0 && (
             <select
               value={divinityAI.selectedLorebookId ?? ""}

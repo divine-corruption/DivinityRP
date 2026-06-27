@@ -30,7 +30,12 @@ import {
 } from "@/lib/conversation-threads";
 import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
-import type { ChatMessage } from "@/lib/types";
+import {
+  getRpSettings,
+  loreToPayload,
+  selectRelevantLore,
+} from "@/lib/rp-settings";
+import type { ChatMessage, LoreEntry } from "@/lib/types";
 import { fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 
 type ActiveChatContextValue = {
@@ -181,10 +186,83 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
           typeof window !== "undefined"
             ? localStorage.getItem("divine_active_character") ?? undefined
             : undefined;
-        const loreData =
+
+        // Per-character memory (overviewMemory) is stashed on the active
+        // character payload by the roleplay provider. Inject it so the
+        // character "remembers" across separate conversations.
+        let memoryData: string | undefined;
+        let activeCharacterId: string | undefined;
+        if (characterData) {
+          try {
+            const parsed = JSON.parse(characterData) as {
+              id?: string;
+              memory?: string;
+            };
+            activeCharacterId = parsed.id;
+            if (parsed.memory && parsed.memory.trim()) {
+              memoryData = parsed.memory.trim();
+            }
+          } catch {
+            // non-critical
+          }
+        }
+
+        // Smart lore injection: filter the full lore set by importance +
+        // keyword match against recent conversation text BEFORE sending,
+        // instead of dumping every entry into the prompt.
+        let loreData: string | undefined;
+        if (typeof window !== "undefined") {
+          const rawLore = localStorage.getItem("divine_lore");
+          if (rawLore) {
+            try {
+              const allEntries = JSON.parse(rawLore) as LoreEntry[];
+              const settings = getRpSettings();
+              if (settings.autoInjectLore && Array.isArray(allEntries)) {
+                // Scope to this character's lore (+ universal, characterId-less).
+                const scoped = allEntries.filter(
+                  (e) =>
+                    e.approved !== false &&
+                    (!e.characterId ||
+                      !activeCharacterId ||
+                      e.characterId === activeCharacterId)
+                );
+                // Scan the last few messages for keyword matches.
+                const recentText = request.messages
+                  .slice(-4)
+                  .flatMap((m) =>
+                    (m.parts ?? [])
+                      .filter(
+                        (p) => (p as { type?: string }).type === "text"
+                      )
+                      .map((p) => (p as { text?: string }).text ?? "")
+                  )
+                  .join(" ");
+                const selected = selectRelevantLore({
+                  entries: scoped,
+                  recentText,
+                  threshold: settings.loreImportanceThreshold,
+                });
+                if (selected.length > 0) {
+                  loreData = loreToPayload(selected);
+                }
+              } else if (!settings.autoInjectLore) {
+                loreData = undefined;
+              } else {
+                // Fallback: pass raw lore through unchanged.
+                loreData = rawLore;
+              }
+            } catch {
+              loreData = rawLore;
+            }
+          }
+        }
+
+        // Global system prompt (applies to every conversation).
+        const globalSystemPrompt =
           typeof window !== "undefined"
-            ? localStorage.getItem("divine_lore") ?? undefined
+            ? getRpSettings().globalSystemPrompt || undefined
             : undefined;
+
         const arcData =
           typeof window !== "undefined"
             ? localStorage.getItem(`divine_chat_arc:${request.id}`) ?? undefined
@@ -211,6 +289,8 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             customPrompt,
             characterData,
             loreData,
+            memoryData,
+            globalSystemPrompt,
             arcData,
             regenInstruction,
             ...request.body,

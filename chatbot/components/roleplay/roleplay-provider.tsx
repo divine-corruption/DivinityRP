@@ -248,6 +248,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       setCurrentView("characters");
       if (typeof window !== "undefined") {
         const charData = JSON.stringify({
+          id: character.id,
           name: character.name,
           description: character.description,
           personality: character.personality,
@@ -258,6 +259,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
           tags: character.tags,
           avatar: character.avatar,
           images: character.images,
+          memory: character.brain?.overviewMemory ?? "",
         });
         localStorage.setItem("divine_active_character", charData);
         // Open (or resume) this character's default conversation thread so its
@@ -323,6 +325,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem(
             "divine_active_character",
             JSON.stringify({
+              id: c.id,
               name: c.name,
               description: c.description,
               personality: c.personality,
@@ -333,6 +336,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
               tags: c.tags,
               avatar: c.avatar,
               images: c.images,
+              memory: c.brain?.overviewMemory ?? "",
             })
           );
         }

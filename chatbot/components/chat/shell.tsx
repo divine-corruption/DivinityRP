@@ -39,8 +39,10 @@ import {
 } from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage, MediaItem } from "@/lib/types";
 import { type ActiveArc, clearActiveArc, loadActiveArc } from "@/lib/active-arc";
+import { compileConversationToBrain } from "@/lib/compile-brain-client";
 import {
   type ConversationThread,
+  markThreadCompiled,
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { cn } from "@/lib/utils";
@@ -363,6 +365,7 @@ export function ChatShell() {
     addGalleryItems,
     clearGalleryItems,
     addLoreEntry,
+    updateCharacter,
   } = useRoleplay();
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
@@ -442,6 +445,37 @@ export function ChatShell() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
+
+      // Also fold this conversation into the character's persistent BRAIN so
+      // it's remembered across separate conversations (not just as a lore card).
+      const responseChunks = messages
+        .filter((m) => m.role === "assistant")
+        .map((m) =>
+          m.parts
+            ?.filter((p) => p.type === "text")
+            .map((p) => (p as { text: string }).text)
+            .join(" ")
+            .trim()
+        )
+        .filter((t): t is string => Boolean(t));
+
+      if (responseChunks.length > 0) {
+        try {
+          const updatedBrain = await compileConversationToBrain({
+            characterName: selectedCharacter.name,
+            brain: selectedCharacter.brain,
+            responseChunks,
+            sessionTitle: activeArc?.title,
+          });
+          updateCharacter(selectedCharacter.id, { brain: updatedBrain });
+          // Mark this conversation closed & compiled in the thread registry.
+          markThreadCompiled(chatId);
+        } catch (brainErr) {
+          // Brain compile is best-effort; the lore memory above already saved.
+          console.warn("Brain compile failed:", brainErr);
+        }
+      }
+
       toast.success(`Saved memory: ${data.title || "Compiled Memory"}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to compile");

@@ -11,6 +11,7 @@ import { DivineVision } from "./divine-vision";
 import { LoreUniverseView } from "./loreuniverse-view";
 import { DivineCorruptionView } from "./divinecorruption-view";
 import { MediaGallery } from "./media-gallery";
+import { ModelTesterView } from "./modeltester-view";
 import { SettingsView } from "./settings-view";
 
 export function RoleplayLayout() {
@@ -32,6 +33,8 @@ export function RoleplayLayout() {
         return <LoreUniverseView />;
       case "divinecorruption":
         return <DivineCorruptionView />;
+      case "modeltester":
+        return <ModelTesterView />;
       case "settings":
         return <SettingsView />;
       default:

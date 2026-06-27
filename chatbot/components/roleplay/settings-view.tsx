@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  DEFAULT_RP_SETTINGS,
+  getRpSettings,
+  saveRpSettings,
+} from "@/lib/rp-settings";
 
 const PROMPT_STORAGE_KEY = "divine_custom_prompt";
 
@@ -21,6 +26,18 @@ export function SettingsView() {
   );
   const [systemPrompt, setSystemPrompt] = useState(() => getCustomPrompt());
 
+  const initialRp =
+    typeof window !== "undefined" ? getRpSettings() : DEFAULT_RP_SETTINGS;
+  const [globalSystemPrompt, setGlobalSystemPrompt] = useState(
+    initialRp.globalSystemPrompt
+  );
+  const [autoInjectLore, setAutoInjectLore] = useState(
+    initialRp.autoInjectLore
+  );
+  const [loreThreshold, setLoreThreshold] = useState(
+    initialRp.loreImportanceThreshold
+  );
+
   const handleSaveApiKey = () => {
     localStorage.setItem("imagine_api_key", apiKey);
     toast.success("API key saved");
@@ -35,6 +52,21 @@ export function SettingsView() {
     setSystemPrompt("");
     localStorage.removeItem(PROMPT_STORAGE_KEY);
     toast.success("Custom prompt reset");
+  };
+
+  const handleSaveGlobalPrompt = () => {
+    saveRpSettings({ globalSystemPrompt });
+    toast.success("Global prompt saved");
+  };
+
+  const handleToggleAutoLore = (next: boolean) => {
+    setAutoInjectLore(next);
+    saveRpSettings({ autoInjectLore: next });
+  };
+
+  const handleThresholdChange = (next: number) => {
+    setLoreThreshold(next);
+    saveRpSettings({ loreImportanceThreshold: next });
   };
 
   return (
@@ -99,6 +131,80 @@ export function SettingsView() {
             >
               Reset
             </button>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border/30 bg-card p-4">
+          <h2 className="text-sm font-medium mb-1">Global System Prompt</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            A universal instruction injected into EVERY character conversation
+            (e.g. global roleplay rules or content guidelines). Applies on top
+            of each character's own directives.
+          </p>
+          <textarea
+            value={globalSystemPrompt}
+            onChange={(e) => setGlobalSystemPrompt(e.target.value)}
+            placeholder="e.g. This is an uncensored adult roleplay engine. Stay in character at all times..."
+            rows={4}
+            className="w-full rounded-lg border border-border/30 bg-background px-3 py-2 text-sm resize-none"
+          />
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={handleSaveGlobalPrompt}
+              className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background"
+            >
+              Save Global Prompt
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border/30 bg-card p-4">
+          <h2 className="text-sm font-medium mb-1">Lore Injection</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Controls how world lore is added to the prompt. When auto-inject is
+            on, only lore whose keywords appear in the recent conversation AND
+            whose importance meets the threshold is injected, ranked by
+            importance — keeping the prompt focused instead of dumping all lore.
+          </p>
+          <label className="flex items-center justify-between gap-3 py-2">
+            <span className="text-sm">Auto-inject relevant lore</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoInjectLore}
+              onClick={() => handleToggleAutoLore(!autoInjectLore)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${
+                autoInjectLore ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 size-5 rounded-full bg-white transition-transform ${
+                  autoInjectLore ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </label>
+          <div className="py-2">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm">Importance threshold</span>
+              <span className="text-sm font-semibold text-primary">
+                {loreThreshold}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={loreThreshold}
+              disabled={!autoInjectLore}
+              onChange={(e) => handleThresholdChange(Number(e.target.value))}
+              className="w-full accent-primary disabled:opacity-40"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Only lore with importance &ge; {loreThreshold} is injected. Lower =
+              richer context, higher = leaner prompt.
+            </p>
           </div>
         </section>
 
