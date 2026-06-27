@@ -147,6 +147,43 @@ export function createArcThread(params: {
   return thread;
 }
 
+/**
+ * Force-create a brand-new conversation thread for a character (NOT tied to a
+ * story arc). This is the primary "New Conversation" path: every call yields a
+ * fresh, independently-persisted chat with its own history. The thread carries
+ * no arcId, so it resolves as a normal free-roleplay conversation.
+ */
+export function createNewThread(params: {
+  characterId: string;
+  title?: string;
+}): ConversationThread {
+  const { characterId, title } = params;
+  const threads = readRegistry();
+  const count = threads.filter((t) => t.characterId === characterId).length;
+  const thread: ConversationThread = {
+    id: generateUUID(),
+    characterId,
+    arcId: undefined,
+    title: title?.trim() || `Conversation ${count + 1}`,
+    createdAt: Date.now(),
+    lastOpenedAt: Date.now(),
+  };
+  threads.push(thread);
+  writeRegistry(threads);
+  rememberLastThread(characterId, thread.id);
+  return thread;
+}
+
+/** Rename a thread (used by the conversation list inline rename). */
+export function renameThread(id: string, title: string): void {
+  const threads = readRegistry();
+  const t = threads.find((x) => x.id === id);
+  if (t) {
+    t.title = title.trim() || t.title;
+    writeRegistry(threads);
+  }
+}
+
 export function touchThread(id: string): void {
   const threads = readRegistry();
   const t = threads.find((x) => x.id === id);

@@ -21,6 +21,7 @@ export interface RoleplayActions {
   setCurrentView: (view: SidebarView) => void;
   importCharacter: (data: unknown) => Character;
   selectCharacter: (character: Character | null) => void;
+  updateCharacter: (id: string, patch: Partial<Character>) => void;
   deleteCharacter: (id: string) => void;
   addLoreEntry: (entry: LoreEntry) => void;
   updateLoreEntry: (id: string, entry: Partial<LoreEntry>) => void;
