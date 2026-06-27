@@ -62,6 +62,7 @@ export const systemPrompt = ({
   customPrompt,
   characterSystemPrompt,
   loreData,
+  arcData,
 }: {
   requestHints: RequestHints;
   supportsTools: boolean;
@@ -69,6 +70,7 @@ export const systemPrompt = ({
   customPrompt?: string;
   characterSystemPrompt?: string;
   loreData?: string;
+  arcData?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   const characterPrompt = character
@@ -104,11 +106,35 @@ export const systemPrompt = ({
     ? `\n\n## World Lore Context — This is the established lore of the world. You must remember and reference it naturally in your responses. Do not contradict it. If the user's actions would affect this lore, acknowledge and evolve it organically:\n\n${loreText}`
     : "";
 
-  if (!supportsTools) {
-    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}`;
+  let arcText = "";
+  if (arcData) {
+    try {
+      const arc = JSON.parse(arcData) as {
+        title?: string;
+        tone?: string;
+        summary?: string;
+        scenario?: string;
+      };
+      const parts: string[] = [];
+      if (arc.title) parts.push(`Title: ${arc.title}`);
+      if (arc.tone) parts.push(`Tone: ${arc.tone}`);
+      if (arc.summary) parts.push(`Premise: ${arc.summary}`);
+      if (arc.scenario) parts.push(`Scenario: ${arc.scenario}`);
+      arcText = parts.join("\n");
+    } catch {
+      arcText = arcData;
+    }
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}\n\n${artifactsPrompt}`;
+  const arcPrompt = arcText
+    ? `\n\n## ACTIVE STORY ARC — This is the scenario the user is currently roleplaying through. It takes precedence over the character's default scenario. Stay within this arc's setting, tone and premise. Drive the story along this arc; do not silently abandon it or reset to a different scenario:\n\n${arcText}`
+    : "";
+
+  if (!supportsTools) {
+    return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}`;
+  }
+
+  return `${regularPrompt}\n\n${requestPrompt}${characterPrompt}${charSystemPrompt}${userPrompt}${lorePrompt}${arcPrompt}\n\n${artifactsPrompt}`;
 };
 
 export const codePrompt = `

@@ -35,6 +35,7 @@ export const postRequestBodySchema = z.object({
   customPrompt: z.string().optional(),
   characterData: z.string().optional(),
   loreData: z.string().optional(),
+  arcData: z.string().optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

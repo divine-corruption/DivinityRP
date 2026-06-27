@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, characterData, loreData } =
+    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, characterData, loreData, arcData } =
       requestBody;
 
     const [, session] = await Promise.all([
@@ -217,6 +217,7 @@ export async function POST(request: Request) {
             customPrompt,
             characterSystemPrompt,
             loreData,
+            arcData,
           }),
           messages: modelMessages,
           stopWhen: stepCountIs(5),

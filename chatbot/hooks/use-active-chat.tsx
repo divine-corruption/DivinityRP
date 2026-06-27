@@ -150,6 +150,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
           typeof window !== "undefined"
             ? localStorage.getItem("divine_lore") ?? undefined
             : undefined;
+        const arcData =
+          typeof window !== "undefined"
+            ? localStorage.getItem(`divine_chat_arc:${request.id}`) ?? undefined
+            : undefined;
 
         return {
           body: {
@@ -162,6 +166,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             customPrompt,
             characterData,
             loreData,
+            arcData,
             ...request.body,
           },
         };

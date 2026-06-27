@@ -38,6 +38,12 @@ import {
   useArtifactSelector,
 } from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage, MediaItem } from "@/lib/types";
+import {
+  type ActiveArc,
+  clearActiveArc,
+  loadActiveArc,
+  saveActiveArc,
+} from "@/lib/active-arc";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
@@ -372,11 +378,7 @@ export function ChatShell() {
   const [visionIndex, setVisionIndex] = useState(0);
   const [storyPickerOpen, setStoryPickerOpen] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
-  const [activeArc, setActiveArc] = useState<{
-    title: string;
-    summary?: string;
-    tone?: string;
-  } | null>(null);
+  const [activeArc, setActiveArc] = useState<ActiveArc | null>(null);
   const [compiling, setCompiling] = useState(false);
 
   const openVision = (item: MediaItem, list: MediaItem[]) => {
@@ -502,6 +504,14 @@ export function ChatShell() {
   const stopRef = useRef(stop);
   stopRef.current = stop;
 
+  // Hydrate the active arc for the current chat on first mount so the banner
+  // and RP context persist across reloads. Subsequent chat switches are
+  // handled by the prevChatIdRef effect below.
+  useEffect(() => {
+    setActiveArc(loadActiveArc(chatId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
@@ -513,7 +523,9 @@ export function ChatShell() {
       setActivePanel(null);
       setVisionList(null);
       setStoryPickerOpen(false);
-      setActiveArc(null);
+      // Restore this chat's persisted arc (if any) so the banner + RP context
+      // survive navigating away and back. Falls back to null for fresh chats.
+      setActiveArc(loadActiveArc(chatId));
     }
   }, [chatId, setArtifact]);
   const prevMessageCountRef = useRef(messages.length);
@@ -772,7 +784,7 @@ export function ChatShell() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-primary/80">
-                      New Story Arc
+                      Story Arc
                     </span>
                     {activeArc.tone && (
                       <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary">
@@ -791,7 +803,10 @@ export function ChatShell() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveArc(null)}
+                  onClick={() => {
+                    clearActiveArc(chatId);
+                    setActiveArc(null);
+                  }}
                   className="shrink-0 rounded-lg p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"
                   title="Dismiss"
                 >
@@ -1004,12 +1019,19 @@ export function ChatShell() {
                 } as ChatMessage,
               ]);
             }
-            // Show the arc title banner in the chat interface.
-            setActiveArc({
+            // Build the active arc and persist it per-chat so the banner and the
+            // RP context survive leaving and resuming this chat.
+            const arc: ActiveArc = {
+              nodeId: node.id,
               title: node.title,
               summary: node.summary,
               tone: node.tone,
-            });
+              scenario: node.scenario,
+              firstMes: node.firstMes,
+              appliedAt: Date.now(),
+            };
+            saveActiveArc(chatId, arc);
+            setActiveArc(arc);
             setStoryPickerOpen(false);
           }}
           onClose={() => setStoryPickerOpen(false)}
