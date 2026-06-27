@@ -1,8 +1,10 @@
 import { put } from "@vercel/blob";
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
+import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
 const FileSchema = z.object({
   file: z
@@ -47,8 +49,21 @@ export async function POST(request: Request) {
     const filename = (formData.get("file") as File).name;
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     const fileBuffer = await file.arrayBuffer();
+    const contentType = (file as File).type || undefined;
 
     try {
+      // Preferred: Cloudflare R2.
+      if (isR2Configured()) {
+        const key = `chat/${randomUUID()}-${safeName}`;
+        const { url } = await uploadToR2(key, fileBuffer, contentType);
+        return NextResponse.json({
+          url,
+          pathname: key,
+          contentType: contentType ?? "application/octet-stream",
+        });
+      }
+
+      // Fallback: Vercel Blob.
       const data = await put(`${safeName}`, fileBuffer, {
         access: "public",
       });

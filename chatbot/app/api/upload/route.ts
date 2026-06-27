@@ -1,8 +1,9 @@
-import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
 import { writeFile } from "fs/promises";
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { join } from "path";
+import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED = [
@@ -40,8 +41,17 @@ export async function POST(request: Request) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
     const filename = `forge/${randomUUID()}.${ext}`;
 
-    // Production / any environment with Blob configured: upload to Vercel Blob.
-    // (Vercel's filesystem is read-only, so writing to public/ would fail.)
+    // Preferred: Cloudflare R2 object storage.
+    if (isR2Configured()) {
+      const { url } = await uploadToR2(
+        filename,
+        bytes,
+        file.type || undefined
+      );
+      return NextResponse.json({ url, filename });
+    }
+
+    // Fallback: Vercel Blob (Vercel's filesystem is read-only).
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       const data = await put(filename, bytes, {
         access: "public",
