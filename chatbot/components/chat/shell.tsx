@@ -679,22 +679,25 @@ export function ChatShell() {
           )}
         >
           {selectedCharacter && (
-            <div className="flex h-14 items-center justify-between border-b border-border/20 bg-card px-4 shrink-0">
+            <div className="flex h-14 items-center justify-between border-b border-border/30 bg-card/60 px-4 shrink-0 backdrop-blur-md">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                  {selectedCharacter.avatar ? (
-                    <img
-                      src={selectedCharacter.avatar}
-                      alt={selectedCharacter.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold">
-                      {selectedCharacter.name.charAt(0)}
-                    </span>
-                  )}
+                <div className="relative shrink-0">
+                  <div className="absolute -inset-0.5 rounded-full bg-gradient-to-tr from-primary/50 to-fuchsia-500/40 opacity-70 blur-[3px]" />
+                  <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-primary/40">
+                    {selectedCharacter.avatar ? (
+                      <img
+                        src={selectedCharacter.avatar}
+                        alt={selectedCharacter.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs font-bold">
+                        {selectedCharacter.name.charAt(0)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm font-medium truncate">
+                <span className="text-sm font-semibold truncate tracking-tight">
                   {selectedCharacter.name}
                 </span>
               </div>
@@ -803,7 +806,13 @@ export function ChatShell() {
                 <button
                   type="button"
                   onClick={() => {
-                    clearActiveArc(chatId);
+                    if (typeof window !== "undefined") {
+                      try {
+                        localStorage.removeItem(`divine_chat_arc:${chatId}`);
+                      } catch {
+                        /* non-critical */
+                      }
+                    }
                     setActiveArc(null);
                   }}
                   className="shrink-0 rounded-lg p-1 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground"

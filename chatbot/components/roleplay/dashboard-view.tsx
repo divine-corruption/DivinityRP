@@ -1,51 +1,58 @@
 "use client";
 
-import { BookOpen, Skull, Users } from "lucide-react";
+import { BookOpen, MessagesSquare, Sparkles, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { listThreadsForCharacter } from "@/lib/conversation-threads";
 import { useRoleplay } from "@/lib/roleplay-store";
 
 export function DashboardView() {
-  const {
-    characters,
-    loreEntries,
-    storyNodes,
-    setCurrentView,
-    selectCharacter,
-  } = useRoleplay();
+  const { characters, loreEntries, setCurrentView, selectCharacter } =
+    useRoleplay();
+
+  // Count saved conversations across all characters (client-only).
+  const [conversationCount, setConversationCount] = useState(0);
+  useEffect(() => {
+    let total = 0;
+    for (const c of characters) {
+      total += listThreadsForCharacter(c.id).length;
+    }
+    setConversationCount(total);
+  }, [characters]);
 
   const stats = [
     {
       label: "Characters",
       value: characters.length,
       icon: Users,
-      color: "text-blue-500",
-      bg: "bg-blue-500/10",
+      onClick: () => setCurrentView("characters"),
+    },
+    {
+      label: "Conversations",
+      value: conversationCount,
+      icon: MessagesSquare,
       onClick: () => setCurrentView("characters"),
     },
     {
       label: "Lore Entries",
       value: loreEntries.length,
       icon: BookOpen,
-      color: "text-amber-500",
-      bg: "bg-amber-500/10",
       onClick: () => setCurrentView("loreuniverse"),
-    },
-    {
-      label: "Story Nodes",
-      value: storyNodes.length,
-      icon: Skull,
-      color: "text-purple-500",
-      bg: "bg-purple-500/10",
-      onClick: () => setCurrentView("divinecorruption"),
     },
   ];
 
   return (
-    <div className="flex h-full flex-col items-center justify-center p-8 overflow-y-auto">
+    <div className="flex h-full flex-col items-center justify-center overflow-y-auto p-8">
       <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">DIVINE</h1>
-          <p className="mt-2 text-muted-foreground">
-            Immersive AI roleplay engine — powered by xAI Grok 4.3
+        <div className="mb-10 text-center">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-primary">
+            <Sparkles className="size-3" />
+            Roleplay Engine
+          </div>
+          <h1 className="divine-wordmark divine-glow-text text-6xl font-black tracking-tight">
+            DIVINE
+          </h1>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Immersive AI roleplay — powered by xAI Grok 4.3
           </p>
         </div>
 
@@ -55,12 +62,14 @@ export function DashboardView() {
               key={stat.label}
               type="button"
               onClick={stat.onClick}
-              className="flex flex-col items-center gap-2 rounded-xl border border-border/40 p-4 transition-colors hover:bg-accent/50"
+              className="divine-card group flex flex-col items-center gap-2 rounded-2xl p-5"
             >
-              <div className={`rounded-lg ${stat.bg} p-2`}>
-                <stat.icon className={`size-5 ${stat.color}`} />
+              <div className="rounded-xl bg-primary/12 p-2.5 text-primary ring-1 ring-primary/20 transition-all group-hover:bg-primary/20 group-hover:ring-primary/40">
+                <stat.icon className="size-5" />
               </div>
-              <span className="text-2xl font-bold">{stat.value}</span>
+              <span className="text-3xl font-bold tabular-nums">
+                {stat.value}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {stat.label}
               </span>
@@ -69,7 +78,7 @@ export function DashboardView() {
         </div>
 
         {characters.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border/40 p-8 text-center">
+          <div className="divine-card rounded-2xl border-dashed p-8 text-center">
             <p className="text-muted-foreground">
               Import a character from Chub.ai or SillyTavern to begin
             </p>
@@ -90,15 +99,22 @@ export function DashboardView() {
                     selectCharacter(char);
                     setCurrentView("characters");
                   }}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border/20 p-3 text-left transition-colors hover:bg-accent/50"
+                  className="divine-card flex w-full items-center gap-3 rounded-xl p-3 text-left"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold">
-                    {char.name.charAt(0)}
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-bold ring-1 ring-border/60">
+                    {char.avatar ? (
+                      // biome-ignore lint/performance/noImgElement: avatar
+                      <img
+                        src={char.avatar}
+                        alt={char.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      char.name.charAt(0)
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {char.name}
-                    </p>
+                    <p className="truncate text-sm font-medium">{char.name}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       {char.description.slice(0, 60)}
                     </p>

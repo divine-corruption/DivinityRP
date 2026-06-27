@@ -48,8 +48,8 @@ export function DivineSidebar({ user }: { user: User | undefined }) {
         <SidebarMenu>
           <SidebarMenuItem className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2 px-2">
-              <Compass className="size-5 text-primary" />
-              <span className="text-sm font-bold group-data-[collapsible=icon]:hidden">
+              <Compass className="size-5 text-primary divine-glow-text" />
+              <span className="divine-wordmark text-sm font-black tracking-wide group-data-[collapsible=icon]:hidden">
                 DIVINE
               </span>
             </div>
