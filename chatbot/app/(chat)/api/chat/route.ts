@@ -69,7 +69,14 @@ export async function POST(request: Request) {
   try {
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+  } catch (error) {
+    // Surface the real validation failure server-side so a schema/client
+    // mismatch (which returns an opaque 400 to the browser) is diagnosable
+    // from the function logs instead of being silently swallowed.
+    console.error(
+      "Invalid chat request body:",
+      error instanceof Error ? error.message : String(error)
+    );
     return new ChatbotError("bad_request:api").toResponse();
   }
 
