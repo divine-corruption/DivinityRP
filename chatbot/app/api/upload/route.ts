@@ -1,12 +1,14 @@
 import { randomUUID } from "crypto";
-import { writeFile } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { join } from "path";
 import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED = [
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
+
+const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/jpg",
   "image/png",
@@ -14,40 +16,64 @@ const ALLOWED = [
   "image/gif",
 ];
 
+const ALLOWED_VIDEO_TYPES = [
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+  "video/x-m4v",
+];
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
+    // Optional: scope upload to a specific character
+    const characterId = formData.get("characterId") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (file.size > MAX_BYTES) {
+    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+
+    if (file.type && !isImage && !isVideo) {
       return NextResponse.json(
-        { error: "Image must be 10MB or smaller" },
+        {
+          error:
+            "Unsupported file type. Use JPEG, PNG, WEBP, GIF for images or MP4, WEBM, MOV, OGG for videos.",
+        },
         { status: 400 }
       );
     }
 
-    if (file.type && !ALLOWED.includes(file.type)) {
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > maxBytes) {
       return NextResponse.json(
-        { error: "Unsupported image type (use JPEG, PNG, WEBP or GIF)" },
+        {
+          error: isVideo
+            ? "Video must be 100MB or smaller"
+            : "Image must be 10MB or smaller",
+        },
         { status: 400 }
       );
     }
 
     const bytes = await file.arrayBuffer();
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
-    const filename = `forge/${randomUUID()}.${ext}`;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? (isVideo ? "mp4" : "png");
+
+    // Build a storage path scoped to the character when possible
+    const prefix = characterId
+      ? `characters/${characterId}`
+      : isVideo
+      ? "gallery/videos"
+      : "forge";
+    const filename = `${prefix}/${randomUUID()}.${ext}`;
 
     // Preferred: Cloudflare R2 object storage.
     if (isR2Configured()) {
-      const { url } = await uploadToR2(
-        filename,
-        bytes,
-        file.type || undefined
-      );
+      const { url } = await uploadToR2(filename, bytes, file.type || undefined);
       return NextResponse.json({ url, filename });
     }
 
@@ -62,7 +88,9 @@ export async function POST(request: Request) {
 
     // Local dev fallback: write to public/uploads and serve from there.
     const localName = `${randomUUID()}.${ext}`;
-    const filepath = join(process.cwd(), "public", "uploads", localName);
+    const uploadsDir = join(process.cwd(), "public", "uploads");
+    await mkdir(uploadsDir, { recursive: true });
+    const filepath = join(uploadsDir, localName);
     await writeFile(filepath, Buffer.from(bytes));
 
     const host = request.headers.get("host") ?? "localhost:3000";

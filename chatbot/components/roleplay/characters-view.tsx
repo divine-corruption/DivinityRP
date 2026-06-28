@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  Film,
   Hammer,
+  ImageIcon,
   Loader2,
   MessagesSquare,
   Pencil,
@@ -11,6 +13,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { nanoid } from "nanoid";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -19,7 +22,8 @@ import {
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { useRoleplay } from "@/lib/roleplay-store";
-import type { Character } from "@/lib/types";
+import type { Character, MediaItem } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { CharacterForger } from "./character-forger";
 
 function CharacterCard({
@@ -47,7 +51,7 @@ function CharacterCard({
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 via-fuchsia-500/10 to-transparent">
               <span className="bg-gradient-to-br from-primary to-fuchsia-400 bg-clip-text text-5xl font-bold text-transparent">
                 {character.name.charAt(0)}
               </span>
@@ -205,8 +209,10 @@ function CharacterDetailView({
   character: Character;
   onBack: () => void;
 }) {
-  const { selectCharacter, updateCharacter, loreBooks, updateLoreBook } = useRoleplay();
+  const { selectCharacter, updateCharacter, addGalleryItems, loreBooks, updateLoreBook } = useRoleplay();
   const [editing, setEditing] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const threads = listThreadsForCharacter(character.id);
 
@@ -227,6 +233,60 @@ function CharacterDetailView({
   const handleDetachLoreBook = useCallback((bookId: string) => {
     updateLoreBook(bookId, { characterId: undefined });
   }, [updateLoreBook]);
+
+  // Upload media to gallery (images or videos) for this character
+  const handleGalleryUpload = async (files: File[]) => {
+    setGalleryUploading(true);
+    const results = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("characterId", character.id);
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`,
+            { method: "POST", body: formData }
+          );
+          if (!res.ok) {
+            const { error } = await res.json().catch(() => ({ error: "" }));
+            toast.error(error || `Failed to upload ${file.name}`);
+            return null;
+          }
+          const data = await res.json();
+          if (!data?.url) return null;
+          const isVideo = file.type.startsWith("video/");
+          const item: MediaItem = {
+            id: nanoid(),
+            url: data.url,
+            type: isVideo ? "video" : "image",
+            caption: file.name,
+            source: "character",
+            characterId: character.id,
+            createdAt: Date.now(),
+          };
+          return item;
+        } catch {
+          toast.error(`Failed to upload ${file.name}`);
+          return null;
+        }
+      })
+    );
+    setGalleryUploading(false);
+    const uploaded = results.filter((r): r is MediaItem => r !== null);
+    if (uploaded.length > 0) {
+      addGalleryItems(uploaded);
+      // Also add to character.images so they persist in character data
+      const newImages = uploaded.map((u) => ({ url: u.url, caption: u.caption }));
+      updateCharacter(character.id, {
+        images: [...character.images, ...newImages],
+      });
+      toast.success(
+        uploaded.length === 1
+          ? "Added to gallery"
+          : `Added ${uploaded.length} items to gallery`
+      );
+    }
+  };
 
   if (editing) {
     return (
@@ -430,28 +490,86 @@ function CharacterDetailView({
           </div>
         </section>
 
-        {character.images.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+        {/* Gallery Section with Upload */}
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-muted-foreground">
               Gallery ({character.images.length})
             </h2>
-            <div className="grid grid-cols-3 gap-2">
-              {character.images.map((img, i) => (
-                <div
-                  key={`${img.url}-${i}`}
-                  className="aspect-square overflow-hidden rounded-lg bg-muted"
-                >
-                  {/* biome-ignore lint/performance/noImgElement: gallery thumb */}
-                  <img
-                    src={img.url}
-                    alt={img.caption || `Gallery ${i + 1}`}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              ))}
+            <>
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length > 0) handleGalleryUpload(files);
+                  if (galleryInputRef.current) galleryInputRef.current.value = "";
+                }}
+              />
+              <button
+                type="button"
+                disabled={galleryUploading}
+                onClick={() => galleryInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-lg border border-border/40 px-2.5 py-1 text-xs font-medium transition-colors hover:border-primary/50 hover:bg-accent disabled:opacity-50"
+              >
+                {galleryUploading ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Upload className="size-3" />
+                )}
+                {galleryUploading ? "Uploading…" : "Upload"}
+              </button>
+            </>
+          </div>
+          {character.images.length === 0 ? (
+            <div
+              className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/40 bg-muted/20 py-8 cursor-pointer hover:border-primary/40 hover:bg-muted/30 transition-colors"
+              onClick={() => galleryInputRef.current?.click()}
+            >
+              <ImageIcon className="size-6 text-muted-foreground/30" />
+              <p className="text-xs text-muted-foreground">
+                No media yet. Click to upload images or videos.
+              </p>
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {character.images.map((img, i) => {
+                const isVideo = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(img.url);
+                return (
+                  <div
+                    key={`${img.url}-${i}`}
+                    className="relative aspect-square overflow-hidden rounded-lg bg-muted"
+                  >
+                    {isVideo ? (
+                      <video
+                        src={img.url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      // biome-ignore lint/performance/noImgElement: gallery thumb
+                      <img
+                        src={img.url}
+                        alt={img.caption || `Gallery ${i + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                    {isVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                        <Film className="size-4 text-white drop-shadow" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -471,9 +589,13 @@ function CharacterEditView({
   const [personality, setPersonality] = useState(character.personality);
   const [scenario, setScenario] = useState(character.scenario);
   const [firstMes, setFirstMes] = useState(character.firstMes);
+  const [mesExample, setMesExample] = useState(character.mesExample);
+  const [systemPrompt, setSystemPrompt] = useState(character.systemPrompt ?? "");
   const [tags, setTags] = useState(character.tags.join(", "));
   const [avatar, setAvatar] = useState(character.avatar ?? "");
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [jsonMode, setJsonMode] = useState(false);
+  const [jsonText, setJsonText] = useState(JSON.stringify(character, null, 2));
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarSelected = async (
@@ -492,6 +614,7 @@ function CharacterEditView({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("characterId", character.id);
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`,
         { method: "POST", body: formData }
@@ -511,6 +634,16 @@ function CharacterEditView({
   };
 
   const handleSave = () => {
+    if (jsonMode) {
+      try {
+        const parsed = JSON.parse(jsonText);
+        const { id, ...rest } = parsed;
+        onSave(rest);
+      } catch {
+        toast.error("Invalid JSON");
+      }
+      return;
+    }
     if (!name.trim()) {
       toast.error("Name is required");
       return;
@@ -521,6 +654,8 @@ function CharacterEditView({
       personality,
       scenario,
       firstMes,
+      mesExample,
+      systemPrompt: systemPrompt || undefined,
       avatar: avatar || undefined,
       tags: tags
         .split(",")
@@ -533,122 +668,174 @@ function CharacterEditView({
     <div className="flex h-full flex-col overflow-y-auto p-6">
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">Edit Character</h1>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg p-1.5 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-
-      {/* Avatar upload */}
-      <section className="mb-6">
-        <h2 className="mb-2.5 text-sm font-medium text-muted-foreground">
-          Avatar
-        </h2>
-        <div className="flex items-center gap-4">
-          <div className="relative shrink-0">
-            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-primary/40 via-fuchsia-500/25 to-transparent blur-md" />
-            <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60">
-              {avatarUploading ? (
-                <Loader2 className="size-6 animate-spin text-primary" />
-              ) : avatar ? (
-                // biome-ignore lint/performance/noImgElement: avatar preview
-                <img
-                  src={avatar}
-                  alt="Avatar"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="text-3xl font-bold">
-                  {name.charAt(0) || "?"}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarSelected}
-            />
-            <button
-              type="button"
-              disabled={avatarUploading}
-              onClick={() => avatarInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent disabled:opacity-50"
-            >
-              {avatarUploading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Upload className="size-4" />
-              )}
-              {avatarUploading ? "Uploading…" : "Upload image"}
-            </button>
-            <p className="text-[11px] text-muted-foreground">
-              Or paste an image URL below.
-            </p>
-            <input
-              value={avatar}
-              onChange={(e) => setAvatar(e.target.value)}
-              placeholder="https://…"
-              className="w-72 rounded-md border border-border/40 bg-background px-2.5 py-1.5 text-xs"
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!jsonMode) {
+                setJsonText(JSON.stringify(character, null, 2));
+              }
+              setJsonMode((m) => !m);
+            }}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+              jsonMode
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border/40 text-muted-foreground hover:bg-accent"
+            )}
+          >
+            {jsonMode ? "Field view" : "Edit JSON"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
         </div>
-      </section>
-
-      <div className="grid max-w-2xl gap-4">
-        <Field label="Name">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="Description">
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="Personality">
-          <textarea
-            value={personality}
-            onChange={(e) => setPersonality(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="Scenario">
-          <textarea
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="First Message">
-          <textarea
-            value={firstMes}
-            onChange={(e) => setFirstMes(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
-        <Field label="Tags (comma separated)">
-          <input
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
-          />
-        </Field>
       </div>
+
+      {jsonMode ? (
+        <div className="flex flex-1 flex-col gap-3">
+          <p className="text-xs text-muted-foreground">
+            Edit the raw JSON. The <code className="rounded bg-muted px-1">id</code> field is ignored on save.
+          </p>
+          <textarea
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            className="min-h-[400px] w-full flex-1 resize-none rounded-md border border-border/40 bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+            spellCheck={false}
+          />
+        </div>
+      ) : (
+        <>
+          {/* Avatar upload */}
+          <section className="mb-6">
+            <h2 className="mb-2.5 text-sm font-medium text-muted-foreground">
+              Avatar
+            </h2>
+            <div className="flex items-center gap-4">
+              <div className="relative shrink-0">
+                <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-primary/40 via-fuchsia-500/25 to-transparent blur-md" />
+                <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60">
+                  {avatarUploading ? (
+                    <Loader2 className="size-6 animate-spin text-primary" />
+                  ) : avatar ? (
+                    // biome-ignore lint/performance/noImgElement: avatar preview
+                    <img
+                      src={avatar}
+                      alt="Avatar"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-3xl font-bold">
+                      {name.charAt(0) || "?"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarSelected}
+                />
+                <button
+                  type="button"
+                  disabled={avatarUploading}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border/40 px-4 py-2 text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent disabled:opacity-50"
+                >
+                  {avatarUploading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                  {avatarUploading ? "Uploading…" : "Upload image"}
+                </button>
+                <p className="text-[11px] text-muted-foreground">
+                  Or paste an image URL below.
+                </p>
+                <input
+                  value={avatar}
+                  onChange={(e) => setAvatar(e.target.value)}
+                  placeholder="https://…"
+                  className="w-72 rounded-md border border-border/40 bg-background px-2.5 py-1.5 text-xs"
+                />
+              </div>
+            </div>
+          </section>
+
+          <div className="grid max-w-2xl gap-4">
+            <Field label="Name">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="Description">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="Personality">
+              <textarea
+                value={personality}
+                onChange={(e) => setPersonality(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="Scenario">
+              <textarea
+                value={scenario}
+                onChange={(e) => setScenario(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="First Message">
+              <textarea
+                value={firstMes}
+                onChange={(e) => setFirstMes(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="Example Dialogue">
+              <textarea
+                value={mesExample}
+                onChange={(e) => setMesExample(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="System Prompt (optional override)">
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                rows={2}
+                placeholder="Leave blank to use the global system prompt"
+                className="w-full resize-none rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+            <Field label="Tags (comma separated)">
+              <input
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-sm"
+              />
+            </Field>
+          </div>
+        </>
+      )}
 
       <div className="mt-6 flex max-w-2xl justify-end gap-2">
         <button

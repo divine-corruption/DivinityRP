@@ -1,7 +1,9 @@
 "use client";
 
 import { Image as ImageIcon, X } from "lucide-react";
+import { nanoid } from "nanoid";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useRoleplay } from "@/lib/roleplay-store";
 import type { MediaItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -15,7 +17,7 @@ import { ModelTesterView } from "./modeltester-view";
 import { SettingsView } from "./settings-view";
 
 export function RoleplayLayout() {
-  const { currentView, galleryItems, clearGalleryItems } = useRoleplay();
+  const { currentView, galleryItems, addGalleryItems, clearGalleryItems, selectedCharacter } = useRoleplay();
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [visionList, setVisionList] = useState<MediaItem[] | null>(null);
   const [visionIndex, setVisionIndex] = useState(0);
@@ -23,6 +25,57 @@ export function RoleplayLayout() {
   const openVision = (item: MediaItem, list: MediaItem[]) => {
     setVisionList(list);
     setVisionIndex(Math.max(0, list.findIndex((m) => m.id === item.id)));
+  };
+
+  const handleGalleryUpload = async (files: File[]) => {
+    const results = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          if (selectedCharacter?.id) {
+            formData.append("characterId", selectedCharacter.id);
+          }
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`,
+            { method: "POST", body: formData }
+          );
+          if (!res.ok) {
+            const { error } = await res.json().catch(() => ({ error: "" }));
+            toast.error(error || `Failed to upload ${file.name}`);
+            return null;
+          }
+          const data = await res.json();
+          if (!data?.url) {
+            toast.error(`Failed to upload ${file.name}`);
+            return null;
+          }
+          const item: MediaItem = {
+            id: nanoid(),
+            url: data.url,
+            type: file.type.startsWith("video/") ? "video" : "image",
+            caption: file.name,
+            source: "uploaded",
+            characterId: selectedCharacter?.id,
+            createdAt: Date.now(),
+          };
+          return item;
+        } catch {
+          toast.error(`Failed to upload ${file.name}`);
+          return null;
+        }
+      })
+    );
+
+    const uploaded = results.filter((r): r is MediaItem => r !== null);
+    if (uploaded.length > 0) {
+      addGalleryItems(uploaded);
+      toast.success(
+        uploaded.length === 1
+          ? "Added to gallery"
+          : `Added ${uploaded.length} items to gallery`
+      );
+    }
   };
 
   const renderView = () => {
@@ -90,6 +143,7 @@ export function RoleplayLayout() {
               items={galleryItems}
               onSelect={openVision}
               onClear={clearGalleryItems}
+              onUpload={handleGalleryUpload}
             />
           </div>
         </div>

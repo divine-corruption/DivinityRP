@@ -696,8 +696,12 @@ export function ChatShell() {
         try {
           const formData = new FormData();
           formData.append("file", file);
+          // Scope uploads to this character's R2 folder when one is active.
+          if (selectedCharacter?.id) {
+            formData.append("characterId", selectedCharacter.id);
+          }
           const res = await fetch(
-            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/files/upload`,
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`,
             { method: "POST", body: formData }
           );
           if (!res.ok) {
@@ -1163,7 +1167,15 @@ export function ChatShell() {
 
             {activePanel === "gallery" && (
               <MediaGallery
-                items={selectedCharacter ? galleryItems.filter((item) => item.characterId === selectedCharacter.id) : []}
+                items={
+                  selectedCharacter
+                    ? galleryItems.filter(
+                        (item) =>
+                          item.characterId === selectedCharacter.id ||
+                          item.source === "character"
+                      )
+                    : galleryItems
+                }
                 onSelect={openVision}
                 onClear={clearGalleryItems}
                 onUpload={handleGalleryUpload}
