@@ -294,15 +294,6 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const handleDeleteCharacter = useCallback((id: string) => {
-    setCharacters((prev) => {
-      const updated = prev.filter((c) => c.id !== id);
-      saveJSON(STORAGE_KEY_CHARACTERS, updated);
-      return updated;
-    });
-    setSelectedCharacter((prev) => (prev?.id === id ? null : prev));
-  }, []);
-
   const handleUpdateCharacter = useCallback(
     (id: string, patch: Partial<Character>) => {
       let nextChar: Character | null = null;
@@ -345,6 +336,15 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     },
     []
   );
+
+  const handleDeleteCharacter = useCallback((id: string) => {
+    setCharacters((prev) => {
+      const updated = prev.filter((c) => c.id !== id);
+      saveJSON(STORAGE_KEY_CHARACTERS, updated);
+      return updated;
+    });
+    setSelectedCharacter((prev) => (prev?.id === id ? null : prev));
+  }, []);
 
   const handleAddLoreEntry = useCallback((entry: LoreEntry) => {
     setLoreEntries((prev) => {

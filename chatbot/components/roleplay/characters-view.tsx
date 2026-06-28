@@ -6,6 +6,7 @@ import {
   MessagesSquare,
   Pencil,
   Play,
+  Plus,
   Trash2,
   Upload,
   X,
@@ -202,18 +203,28 @@ function CharacterDetailView({
   character: Character;
   onBack: () => void;
 }) {
-  const { selectCharacter, updateCharacter } = useRoleplay();
+  const { selectCharacter, updateCharacter, loreBooks, updateLoreBook } = useRoleplay();
   const [editing, setEditing] = useState(false);
 
   const threads = listThreadsForCharacter(character.id);
 
+  const characterLoreBooks = loreBooks.filter((b) => b.characterId === character.id);
+  const availableLoreBooks = loreBooks.filter((b) => b.characterId !== character.id);
+
   const handleNewConversation = () => {
     const thread = createNewThread({ characterId: character.id });
     setActiveThreadId(thread.id);
-    // Selecting the character renders the chat shell on the active thread.
     selectCharacter(character);
     toast.success("New conversation started");
   };
+
+  const handleAttachLoreBook = useCallback((bookId: string) => {
+    updateLoreBook(bookId, { characterId: character.id });
+  }, [character.id, updateLoreBook]);
+
+  const handleDetachLoreBook = useCallback((bookId: string) => {
+    updateLoreBook(bookId, { characterId: undefined });
+  }, [updateLoreBook]);
 
   if (editing) {
     return (
@@ -338,6 +349,57 @@ function CharacterDetailView({
         </section>
       )}
 
+      {/* LoreBooks Section */}
+      <section className="mb-4">
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+          Attached LoreBooks ({characterLoreBooks.length})
+        </h2>
+        {characterLoreBooks.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No LoreBooks attached to this character.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {characterLoreBooks.map((book) => (
+              <div key={book.id} className="flex items-center justify-between rounded-lg border border-border/20 bg-muted/30 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{book.name}</p>
+                  {book.description && (
+                    <p className="text-xs text-muted-foreground truncate">{book.description}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDetachLoreBook(book.id)}
+                  className="shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  title="Detach"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {availableLoreBooks.length > 0 && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              Attach existing LoreBook...
+            </summary>
+            <div className="mt-1.5 space-y-1">
+              {availableLoreBooks.map((book) => (
+                <button
+                  key={book.id}
+                  type="button"
+                  onClick={() => handleAttachLoreBook(book.id)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-accent"
+                >
+                  <Plus className="size-3 shrink-0" />
+                  <span className="truncate">{book.name}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
+      </section>
+
       <div className="space-y-4">
         <section>
           <h2 className="mb-2 text-sm font-medium text-muted-foreground">
@@ -393,11 +455,6 @@ function CharacterDetailView({
   );
 }
 
-/**
- * CharacterEditView — edit an existing character, including AVATAR UPLOAD via
- * file picker (uploads to the R2-backed /api/upload route). This is the "edit
- * section" avatar upload the user asked for.
- */
 function CharacterEditView({
   character,
   onClose,
