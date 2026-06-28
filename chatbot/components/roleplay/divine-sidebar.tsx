@@ -2,7 +2,6 @@
 
 import {
   BookOpen,
-  Compass,
   FlaskConical,
   Home,
   Settings,
@@ -50,8 +49,12 @@ export function DivineSidebar({ user }: { user: User | undefined }) {
         <SidebarMenu>
           <SidebarMenuItem className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2 px-2">
-              <Compass className="size-5 text-primary" />
-              <span className="text-sm font-bold group-data-[collapsible=icon]:hidden">
+              <img
+                src="/images/heavenlogo.png"
+                alt="DIVINE"
+                className="size-6 object-contain"
+              />
+              <span className="text-sm font-bold divine-wordmark group-data-[collapsible=icon]:hidden">
                 DIVINE
               </span>
             </div>

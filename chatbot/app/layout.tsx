@@ -5,11 +5,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
 import { SessionProvider } from "next-auth/react";
+import { SplashProvider } from "@/components/roleplay/splash-provider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://chat.vercel.ai"),
   title: "DIVINE - AI Roleplay Engine",
   description: "Immersive AI roleplay engine powered by xAI Grok 4.3.",
+  icons: { icon: "/images/heavenlogo.png", apple: "/images/heavenlogo.png" },
 };
 
 export const viewport = {
@@ -77,7 +79,9 @@ export default function RootLayout({
           <SessionProvider
             basePath={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/auth`}
           >
-            <TooltipProvider>{children}</TooltipProvider>
+            <TooltipProvider>
+              <SplashProvider>{children}</SplashProvider>
+            </TooltipProvider>
           </SessionProvider>
         </ThemeProvider>
       </body>

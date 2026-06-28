@@ -346,6 +346,42 @@ textarea:focus-visible {
   }
 }
 
+/* Glitch effect for splash screen logo */
+@keyframes glitch-skew {
+  0% { clip-path: inset(0 0 80% 0); transform: skew(-0.5deg); }
+  5% { clip-path: inset(20% 0 60% 0); transform: skew(0.8deg); }
+  10% { clip-path: inset(50% 0 30% 0); transform: skew(-0.3deg); }
+  15% { clip-path: inset(10% 0 70% 0); transform: skew(0.5deg); }
+  20% { clip-path: inset(40% 0 40% 0); transform: skew(-0.6deg); }
+  25% { clip-path: inset(0 0 80% 0); transform: skew(0deg); }
+  100% { clip-path: inset(0 0 0 0); transform: skew(0deg); }
+}
+
+@keyframes glitch-rgb {
+  0% { text-shadow: -2px 0 red, 2px 0 cyan; }
+  3% { text-shadow: 3px 0 red, -3px 0 cyan; }
+  6% { text-shadow: -1px 0 red, 1px 0 cyan; }
+  9% { text-shadow: 0 0 0 transparent; }
+  100% { text-shadow: 0 0 0 transparent; }
+}
+
+@keyframes glitch-flicker {
+  0%, 100% { opacity: 1; }
+  7% { opacity: 0.85; }
+  8% { opacity: 1; }
+  29% { opacity: 0.9; }
+  30% { opacity: 1; }
+  50% { opacity: 0.7; }
+  51% { opacity: 1; }
+  97% { opacity: 0.92; }
+  98% { opacity: 1; }
+}
+
+@keyframes splash-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; pointer-events: none; }
+}
+
 @utility fade-up {
   animation: fade-up 0.25s var(--ease-spring) both;
 }

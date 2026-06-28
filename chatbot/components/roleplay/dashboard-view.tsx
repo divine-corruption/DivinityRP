@@ -43,7 +43,12 @@ export function DashboardView() {
     <div className="flex h-full flex-col items-center justify-center p-8 overflow-y-auto">
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">DIVINE</h1>
+          <img
+            src="/images/heavenlogo.png"
+            alt="DIVINE"
+            className="mx-auto mb-4 h-16 w-16 object-contain drop-shadow-[0_0_20px_oklch(0.7_0.26_305/0.4)]"
+          />
+          <h1 className="text-3xl font-bold divine-wordmark">DIVINE</h1>
           <p className="mt-2 text-muted-foreground">
             Immersive AI roleplay engine — powered by xAI Grok 4.3
           </p>
