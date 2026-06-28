@@ -37,6 +37,7 @@ export const postRequestBodySchema = z.object({
   selectedChatModel: z.string(),
   selectedVisibilityType: z.enum(["public", "private"]),
   customPrompt: z.string().max(8000).optional(),
+  temperature: z.number().min(0).max(2).optional(),
   characterData: z.string().max(100000).optional(),
   loreData: z.string().max(100000).optional(),
   memoryData: z.string().max(20000).optional(),

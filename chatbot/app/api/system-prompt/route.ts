@@ -9,11 +9,13 @@ The system prompt you write is directorial guidance for the AI actor — NOT a c
 - How they treat and respond to the user.
 - Narrative pacing and tone to maintain.
 - Any hard rules that keep them in character.
+- How to keep dialogue natural, varied, and story-forward rather than repetitive.
 
 STYLE REQUIREMENTS for the portrayal you instruct:
 - Narration must be third-person, present tense.
 - ALL spoken dialogue must be wrapped in double quotation marks.
 - Immersive, show-don't-tell prose.
+- Favor fresh phrasing, avoid repeating the same adjectives or sentence patterns, and ensure each reply builds on the prior scene.
 
 Output ONLY the system prompt text — no preamble, no markdown headers, no code fences, no quotes around the whole thing. Write it as direct second-person instructions to the AI (e.g. "You play X. You speak in...", "Always...", "Never..."). Keep it focused: 150-350 words.`;
 
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
         },
       ],
       maxTokens: 1024,
+      temperature: 0.8,
     });
 
     const systemPrompt = text.trim();

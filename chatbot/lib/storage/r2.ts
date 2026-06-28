@@ -36,6 +36,16 @@ export function isR2Configured(): boolean {
   );
 }
 
+// Warn once at startup if R2 is not configured so operators know roleplay state
+// will not be durably synced across devices / browser clears.
+if (!isR2Configured() && process.env.NODE_ENV !== "test") {
+  console.warn(
+    "[DivinityRP] Cloudflare R2 is not configured (R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET). " +
+      "Characters, lore, gallery, settings, and conversation threads will only be stored in the browser's localStorage. " +
+      "Set R2_* environment variables to enable durable cross-device persistence."
+  );
+}
+
 function sha256Hex(data: string | Buffer): string {
   return createHash("sha256").update(data).digest("hex");
 }

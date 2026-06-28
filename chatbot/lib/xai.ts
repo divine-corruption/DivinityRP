@@ -14,6 +14,7 @@ interface XAIChatOptions {
   system?: string;
   messages: XAIChatMessage[];
   maxTokens?: number;
+  temperature?: number;
   /** Optional OpenAI-compatible response_format (e.g. { type: "json_object" }). */
   responseFormat?: { type: "json_object" | "text" };
 }
@@ -48,6 +49,7 @@ export async function xaiChat(options: XAIChatOptions): Promise<string> {
       model: options.model ?? "grok-4.3",
       messages,
       max_tokens: options.maxTokens ?? 4096,
+      ...(options.temperature != null ? { temperature: options.temperature } : {}),
       ...(options.responseFormat
         ? { response_format: options.responseFormat }
         : {}),

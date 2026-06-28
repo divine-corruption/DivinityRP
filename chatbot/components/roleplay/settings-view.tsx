@@ -37,6 +37,7 @@ export function SettingsView() {
   const [loreThreshold, setLoreThreshold] = useState(
     initialRp.loreImportanceThreshold
   );
+  const [temperature, setTemperature] = useState(initialRp.temperature);
 
   const handleSaveApiKey = () => {
     localStorage.setItem("imagine_api_key", apiKey);
@@ -57,6 +58,11 @@ export function SettingsView() {
   const handleSaveGlobalPrompt = () => {
     saveRpSettings({ globalSystemPrompt });
     toast.success("Global prompt saved");
+  };
+
+  const handleSaveTemperature = () => {
+    saveRpSettings({ temperature });
+    toast.success("Response temperature saved");
   };
 
   const handleToggleAutoLore = (next: boolean) => {
@@ -230,12 +236,27 @@ export function SettingsView() {
 
         <section className="rounded-xl border border-border/30 bg-card p-4">
           <h2 className="text-sm font-medium mb-1">Data Storage</h2>
-          <p className="text-xs text-muted-foreground">
-            Characters, lore, and story nodes are stored in your browser
-            (localStorage). Chat messages are stored in the database.
-            Published characters are stored in-memory (production uses a
-            subdomain-backed database).
-          </p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Chat history</strong> — stored
+              in PostgreSQL (server-side, durable).
+            </p>
+            <p>
+              <strong className="text-foreground">Characters, lore, gallery, story nodes, settings, conversation threads, arcs</strong> — stored
+              in localStorage <em>and</em> synced to Cloudflare R2 (when
+              configured) so they survive browser clears and follow you across
+              devices.
+            </p>
+            <p>
+              <strong className="text-foreground">Media uploads &amp; generated images</strong> — stored
+              in Cloudflare R2 or Vercel Blob.
+            </p>
+            <p className="pt-1 text-[11px]">
+              R2 sync fires on every change (debounced 1.5 s), on tab-hide, and
+              on page-close — so nothing is lost even if you close the tab
+              immediately after making a change.
+            </p>
+          </div>
         </section>
       </div>
     </div>

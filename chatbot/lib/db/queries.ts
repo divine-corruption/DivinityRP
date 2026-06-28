@@ -34,6 +34,12 @@ import {
 import { generateHashedPassword } from "./utils";
 
 const hasDb = !!process.env.POSTGRES_URL;
+if (!hasDb && process.env.NODE_ENV !== "test") {
+  console.warn(
+    "[DivinityRP] POSTGRES_URL is not set — chat history and messages will NOT be persisted. " +
+      "Set POSTGRES_URL in your environment to enable durable chat storage."
+  );
+}
 const client = hasDb ? postgres(process.env.POSTGRES_URL!) : null;
 const db = client ? drizzle(client) : null;
 

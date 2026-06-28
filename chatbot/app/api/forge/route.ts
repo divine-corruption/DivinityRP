@@ -114,6 +114,7 @@ export async function POST(request: Request) {
       system: forgePrompt,
       messages: [{ role: "user", content }],
       maxTokens: 8192,
+      temperature: 0.85,
       responseFormat: { type: "json_object" },
     });
 

@@ -61,12 +61,13 @@ export function CharacterForger() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const activeSceneRef = useRef<string>("");
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
   const handleGenerateSystemPrompt = async () => {
     if (!result) return;
     setGeneratingPrompt(true);
     try {
-      const res = await fetch("/api/system-prompt", {
+      const res = await fetch(`${basePath}/api/system-prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -78,12 +79,11 @@ export function CharacterForger() {
           mesExample: result.mes_example,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Generation failed");
+        throw new Error((data as { error?: string }).error ?? "Generation failed");
       }
-      const data = await res.json();
-      setSystemPrompt(data.systemPrompt ?? "");
+      setSystemPrompt((data as { systemPrompt?: string }).systemPrompt ?? "");
       toast.success("System prompt generated");
     } catch (err) {
       toast.error(
@@ -112,10 +112,9 @@ export function CharacterForger() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-
-      const data = await res.json();
+      const res = await fetch(`${basePath}/api/upload`, { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setImages((prev) => ({
         ...prev,
         [scene]: prev[scene] ? { ...prev[scene]!, url: data.url } : null,
@@ -148,16 +147,18 @@ export function CharacterForger() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload", {
+      const res = await fetch(`${basePath}/api/upload`, {
         method: "POST",
         body: formData,
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Upload failed");
+        throw new Error((data as { error?: string }).error ?? "Upload failed");
       }
-      const data = await res.json();
-      setAvatarUrl(data.url);
+      setAvatarUrl((data as { url?: string }).url ?? "");
+      if (!data || !(data as { url?: string }).url) {
+        throw new Error("Upload failed");
+      }
       toast.success("Avatar uploaded");
     } catch (err) {
       toast.error(
@@ -195,7 +196,7 @@ export function CharacterForger() {
         url: images[s.key]!.url,
       }));
 
-      const res = await fetch("/api/forge", {
+      const res = await fetch(`${basePath}/api/forge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -208,16 +209,15 @@ export function CharacterForger() {
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Forging failed");
+        throw new Error((data as { error?: string }).error ?? "Forging failed");
       }
 
-      const data: ForgedCharacter = await res.json();
-      setResult(data);
-      setSystemPrompt(data.system_prompt_override ?? "");
-      setAvatarUrl(data.image_analysis?.[0]?.url ?? "");
-      toast.success(`Forged: ${data.name}`);
+      setResult(data as ForgedCharacter);
+      setSystemPrompt((data as ForgedCharacter).system_prompt_override ?? "");
+      setAvatarUrl((data as ForgedCharacter).image_analysis?.[0]?.url ?? "");
+      toast.success(`Forged: ${(data as ForgedCharacter).name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Forging failed");
     } finally {

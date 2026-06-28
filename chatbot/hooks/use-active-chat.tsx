@@ -258,10 +258,14 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         }
 
         // Global system prompt (applies to every conversation).
+        const settings =
+          typeof window !== "undefined" ? getRpSettings() : undefined;
+
         const globalSystemPrompt =
-          typeof window !== "undefined"
-            ? getRpSettings().globalSystemPrompt || undefined
-            : undefined;
+          settings?.globalSystemPrompt || undefined;
+
+        const temperature =
+          typeof window !== "undefined" ? settings?.temperature : undefined;
 
         const arcData =
           typeof window !== "undefined"
@@ -287,6 +291,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibility,
             customPrompt,
+            temperature,
             characterData,
             loreData,
             memoryData,

@@ -7,7 +7,7 @@ import {
   setActiveThreadId,
 } from "@/lib/conversation-threads";
 import { RoleplayCtx } from "@/lib/roleplay-store";
-import { useStateSync } from "@/hooks/use-state-sync";
+import { restoreExtra, useStateSync } from "@/hooks/use-state-sync";
 import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
 
 function parseSillyTavern(data: Record<string, unknown>): Character {
@@ -207,6 +207,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       loreBooks: unknown[];
       loreEntries: unknown[];
       storyNodes: unknown[];
+      extra?: Record<string, unknown>;
     }) => {
       const chars = remote.characters as Character[];
       const gallery = remote.galleryItems as MediaItem[];
@@ -225,6 +226,13 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       saveJSON(STORAGE_KEY_LOREBOOKS, books);
       saveJSON(STORAGE_KEY_LORE, entries);
       saveJSON(STORAGE_KEY_NODES, nodes);
+
+      // Restore extra localStorage keys (settings, threads, arcs, etc.).
+      // Only fills in keys not already present locally so a freshly-written
+      // local value is never overwritten by an older server snapshot.
+      if (remote.extra) {
+        restoreExtra(remote.extra, false);
+      }
     },
     []
   );

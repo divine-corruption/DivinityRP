@@ -22,12 +22,15 @@ export interface RpSettings {
   autoInjectLore: boolean;
   /** 1-10. Only lore entries with importance >= this are auto-injected. */
   loreImportanceThreshold: number;
+  /** 0-1. Controls model creativity for chat responses. */
+  temperature: number;
 }
 
 export const DEFAULT_RP_SETTINGS: RpSettings = {
   globalSystemPrompt: "",
   autoInjectLore: true,
   loreImportanceThreshold: 3,
+  temperature: 0.85,
 };
 
 export function getRpSettings(): RpSettings {

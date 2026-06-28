@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, characterData, loreData, memoryData, globalSystemPrompt, arcData, regenInstruction } =
+    const { id, message, messages, selectedChatModel, selectedVisibilityType, customPrompt, temperature, characterData, loreData, memoryData, globalSystemPrompt, arcData, regenInstruction } =
       requestBody;
 
     const [, session] = await Promise.all([
@@ -242,6 +242,7 @@ export async function POST(request: Request) {
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
           model: getLanguageModel(chatModel),
+          temperature: typeof temperature === "number" ? temperature : 0.85,
           // Token output budget: hard ceiling of 4500 output tokens (≈ the
           // upper bound of a long roleplay reply). The 1500-token floor and
           // 2500-token preferred target can't be enforced by the API (there is
