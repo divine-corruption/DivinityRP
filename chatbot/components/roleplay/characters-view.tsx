@@ -36,31 +36,33 @@ function CharacterCard({
       <button
         type="button"
         onClick={onSelect}
-        className="flex w-full flex-col items-center p-5 text-center"
+        className="flex w-full flex-col text-center"
       >
-        <div className="relative mb-3.5">
-          <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-primary/40 via-fuchsia-500/30 to-transparent opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-100" />
-          <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-border/60 transition-all group-hover:ring-primary/60">
-            {character.avatar ? (
-              // biome-ignore lint/performance/noImgElement: user-supplied avatar
-              <img
-                src={character.avatar}
-                alt={character.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="bg-gradient-to-br from-primary to-fuchsia-400 bg-clip-text text-2xl font-bold text-transparent">
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+          {character.avatar ? (
+            // biome-ignore lint/performance/noImgElement: user-supplied avatar
+            <img
+              src={character.avatar}
+              alt={character.name}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <span className="bg-gradient-to-br from-primary to-fuchsia-400 bg-clip-text text-5xl font-bold text-transparent">
                 {character.name.charAt(0)}
               </span>
-            )}
-          </div>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
-        <h3 className="w-full truncate text-sm font-semibold tracking-tight">
-          {character.name}
-        </h3>
-        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-          {character.description || "No description"}
-        </p>
+        <div className="p-3 text-left">
+          <h3 className="truncate text-sm font-semibold tracking-tight">
+            {character.name}
+          </h3>
+          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+            {character.description || "No description"}
+          </p>
+        </div>
       </button>
       <button
         type="button"
@@ -68,7 +70,7 @@ function CharacterCard({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute right-2 top-2 hidden rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive group-hover:block"
+        className="absolute right-2 top-2 hidden rounded-lg bg-background/60 p-1.5 text-muted-foreground/70 backdrop-blur transition-colors hover:bg-destructive/20 hover:text-destructive group-hover:block"
       >
         <Trash2 className="size-3.5" />
       </button>

@@ -7,13 +7,17 @@ import {
   Info,
   Loader2,
   MessagesSquare,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
   X,
   Maximize2,
   Minimize2,
   Edit3,
   Save,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { useRoleplay } from "@/lib/roleplay-store";
@@ -212,53 +216,228 @@ function LorePanel({
 
 function InfoPanel({
   character,
-  onClose,
 }: {
   character: import("@/lib/types").Character;
-  onClose: () => void;
 }) {
+  const { updateCharacter, loreBooks, updateLoreBook } = useRoleplay();
   const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"view" | "fields" | "json">("view");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const [editName, setEditName] = useState(character.name);
+  const [editDesc, setEditDesc] = useState(character.description);
+  const [editPersonality, setEditPersonality] = useState(character.personality);
+  const [editScenario, setEditScenario] = useState(character.scenario);
+  const [editFirstMes, setEditFirstMes] = useState(character.firstMes);
   const [jsonText, setJsonText] = useState("");
 
   useEffect(() => {
+    setEditName(character.name);
+    setEditDesc(character.description);
+    setEditPersonality(character.personality);
+    setEditScenario(character.scenario);
+    setEditFirstMes(character.firstMes);
     setJsonText(JSON.stringify(character, null, 2));
   }, [character]);
 
-  const handleSave = () => {
+  const handleAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      if (!data?.url) throw new Error("Upload failed");
+      updateCharacter(character.id, {
+        avatar: data.url,
+        images: [{ url: data.url, caption: "Avatar" }, ...character.images],
+      });
+      toast.success("Avatar updated");
+    } catch {
+      toast.error("Failed to upload avatar");
+    }
+  }, [character, updateCharacter]);
+
+  const handleSaveFields = useCallback(() => {
+    updateCharacter(character.id, {
+      name: editName,
+      description: editDesc,
+      personality: editPersonality,
+      scenario: editScenario,
+      firstMes: editFirstMes,
+    });
+    setEditing(false);
+    setMode("view");
+    toast.success("Character updated");
+  }, [character.id, editName, editDesc, editPersonality, editScenario, editFirstMes, updateCharacter]);
+
+  const handleSaveJson = useCallback(() => {
     try {
       const parsed = JSON.parse(jsonText);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("divine_active_character", JSON.stringify(parsed));
-      }
+      const { id, ...rest } = parsed;
+      updateCharacter(character.id, rest);
       setEditing(false);
+      setMode("view");
+      toast.success("Character updated");
     } catch {
-      // invalid json
+      toast.error("Invalid JSON");
     }
+  }, [character.id, jsonText, updateCharacter]);
+
+  const characterLoreBooks = loreBooks.filter((b) => b.characterId === character.id);
+  const availableLoreBooks = loreBooks.filter((b) => b.characterId !== character.id);
+
+  const handleAttachLoreBook = useCallback((bookId: string) => {
+    updateLoreBook(bookId, { characterId: character.id });
+  }, [character.id, updateLoreBook]);
+
+  const handleDetachLoreBook = useCallback((bookId: string) => {
+    updateLoreBook(bookId, { characterId: undefined });
+  }, [updateLoreBook]);
+
+  const startEdit = () => {
+    setEditName(character.name);
+    setEditDesc(character.description);
+    setEditPersonality(character.personality);
+    setEditScenario(character.scenario);
+    setEditFirstMes(character.firstMes);
+    setEditing(true);
+    setMode("fields");
   };
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border/20 px-4 py-2.5">
         <h3 className="text-sm font-medium">Character Info</h3>
-        <button
-          type="button"
-          onClick={() => {
-            if (editing) handleSave();
-            else setEditing(true);
-          }}
-          className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-          title={editing ? "Save" : "Edit JSON"}
-        >
-          {editing ? <Save className="size-3.5" /> : <Edit3 className="size-3.5" />}
-        </button>
+        <div className="flex items-center gap-1">
+          {editing && mode === "fields" && (
+            <button
+              type="button"
+              onClick={() => { setMode("json"); setJsonText(JSON.stringify(character, null, 2)); }}
+              className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+              title="Edit JSON"
+            >
+              <Edit3 className="size-3.5" />
+            </button>
+          )}
+          {!editing ? (
+            <button
+              type="button"
+              onClick={startEdit}
+              className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+              title="Edit character"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          ) : mode === "fields" ? (
+            <button
+              type="button"
+              onClick={handleSaveFields}
+              className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+              title="Save"
+            >
+              <Save className="size-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSaveJson}
+              className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+              title="Save JSON"
+            >
+              <Save className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
-        {editing ? (
+        {editing && mode === "json" ? (
           <textarea
             value={jsonText}
             onChange={(e) => setJsonText(e.target.value)}
             className="h-full w-full resize-none rounded border border-border/30 bg-background p-2 font-mono text-[11px] leading-relaxed"
           />
+        ) : editing && mode === "fields" ? (
+          <div className="space-y-3">
+            {/* Avatar upload */}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted"
+              >
+                {character.avatar ? (
+                  <img src={character.avatar} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold">{character.name.charAt(0)}</span>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Upload className="size-4 text-white" />
+                </div>
+              </button>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Click avatar to upload</p>
+              </div>
+            </div>
+
+            <Field label="Name">
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded border border-border/30 bg-background px-2 py-1 text-xs" />
+            </Field>
+            <Field label="Description">
+              <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={2} className="w-full resize-none rounded border border-border/30 bg-background px-2 py-1 text-xs" />
+            </Field>
+            <Field label="Personality">
+              <textarea value={editPersonality} onChange={(e) => setEditPersonality(e.target.value)} rows={3} className="w-full resize-none rounded border border-border/30 bg-background px-2 py-1 text-xs" />
+            </Field>
+            <Field label="Scenario">
+              <textarea value={editScenario} onChange={(e) => setEditScenario(e.target.value)} rows={2} className="w-full resize-none rounded border border-border/30 bg-background px-2 py-1 text-xs" />
+            </Field>
+            <Field label="First Message">
+              <textarea value={editFirstMes} onChange={(e) => setEditFirstMes(e.target.value)} rows={2} className="w-full resize-none rounded border border-border/30 bg-background px-2 py-1 text-xs" />
+            </Field>
+
+            {/* LoreBooks */}
+            <div>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Attached LoreBooks ({characterLoreBooks.length})
+              </span>
+              {characterLoreBooks.length === 0 ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">None</p>
+              ) : (
+                <div className="mt-1 space-y-1">
+                  {characterLoreBooks.map((book) => (
+                    <div key={book.id} className="flex items-center justify-between rounded border border-border/20 bg-muted/30 px-2 py-1.5">
+                      <span className="text-[11px] truncate">{book.name}</span>
+                      <button type="button" onClick={() => handleDetachLoreBook(book.id)} className="shrink-0 rounded p-0.5 text-muted-foreground/50 hover:text-destructive">
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {availableLoreBooks.length > 0 && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">Attach LoreBook...</summary>
+                  <div className="mt-1 space-y-0.5">
+                    {availableLoreBooks.map((book) => (
+                      <button key={book.id} type="button" onClick={() => handleAttachLoreBook(book.id)} className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] text-muted-foreground transition-colors hover:bg-accent">
+                        <Plus className="size-3 shrink-0" />
+                        <span className="truncate">{book.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="space-y-3">
             <Section label="Name" value={character.name} />
@@ -279,6 +458,20 @@ function InfoPanel({
                       className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary"
                     >
                       {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {characterLoreBooks.length > 0 && (
+              <div>
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  LoreBooks
+                </span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {characterLoreBooks.map((book) => (
+                    <span key={book.id} className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {book.name}
                     </span>
                   ))}
                 </div>
@@ -328,6 +521,17 @@ function Section({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
 
@@ -959,7 +1163,7 @@ export function ChatShell() {
 
             {activePanel === "gallery" && (
               <MediaGallery
-                items={galleryItems}
+                items={selectedCharacter ? galleryItems.filter((item) => item.characterId === selectedCharacter.id) : []}
                 onSelect={openVision}
                 onClear={clearGalleryItems}
                 onUpload={handleGalleryUpload}
@@ -974,10 +1178,7 @@ export function ChatShell() {
             )}
 
             {activePanel === "info" && selectedCharacter && (
-              <InfoPanel
-                character={selectedCharacter}
-                onClose={() => setActivePanel(null)}
-              />
+              <InfoPanel character={selectedCharacter} />
             )}
           </div>
         )}
