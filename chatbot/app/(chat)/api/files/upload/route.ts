@@ -1,14 +1,13 @@
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
+import { writeFile } from "fs/promises";
 import { NextResponse } from "next/server";
+import { join } from "path";
 import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
 import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
 
-// Allowed upload types: still covers chat image attachments (JPEG/PNG) and now
-// extends to the wider set the media Gallery accepts (more image formats +
-// video). Videos are larger, so the cap is raised accordingly.
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -22,7 +21,7 @@ const ALLOWED_VIDEO_TYPES = [
   "video/quicktime",
 ];
 const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES];
-const MAX_BYTES = 50 * 1024 * 1024; // 50MB to accommodate short video clips
+const MAX_BYTES = 50 * 1024 * 1024; // 50MB
 
 const FileSchema = z.object({
   file: z
@@ -38,7 +37,8 @@ const FileSchema = z.object({
 export async function POST(request: Request) {
   const session = await auth();
 
-  if (!session) {
+  // Allow unauthenticated requests in dev mode (guest/dev bypass).
+  if (!session && process.env.NODE_ENV !== "development") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -82,11 +82,24 @@ export async function POST(request: Request) {
       }
 
       // Fallback: Vercel Blob.
-      const data = await put(`${safeName}`, fileBuffer, {
-        access: "public",
-      });
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        const data = await put(`${safeName}`, fileBuffer, {
+          access: "public",
+        });
+        return NextResponse.json(data);
+      }
 
-      return NextResponse.json(data);
+      // Local dev fallback: write to public/uploads.
+      const ext = safeName.split(".").pop() ?? "bin";
+      const localName = `${randomUUID()}.${ext}`;
+      const filepath = join(process.cwd(), "public", "uploads", localName);
+      await writeFile(filepath, Buffer.from(fileBuffer));
+
+      const host = request.headers.get("host") ?? "localhost:3000";
+      const protocol = host.startsWith("localhost") ? "http" : "https";
+      const url = `${protocol}://${host}/uploads/${localName}`;
+
+      return NextResponse.json({ url, pathname: localName, contentType: contentType ?? "application/octet-stream" });
     } catch (_error) {
       return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     }
