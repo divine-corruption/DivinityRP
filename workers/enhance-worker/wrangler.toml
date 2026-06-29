@@ -1,0 +1,20 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "divinityrp-enhance-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-27"
+compatibility_flags = ["nodejs_compat"]
+
+[limits]
+cpu_ms = 30000
+
+[vars]
+APP_ORIGIN = "*"
+REQUIRE_AUTH = "true"
+XAI_MODEL = "grok-4"
+XAI_BASE_URL = "https://api.x.ai/v1"
+ENHANCE_TEMPERATURE = "0.9"
+MAX_OUTPUT_TOKENS = "4500"
+
+# Secrets (set with `wrangler secret put`):
+#   JWT_SECRET   - shared HMAC secret; MUST match auth-worker + the other workers
+#   XAI_API_KEY  - xAI Grok API key used for the enrichment pass

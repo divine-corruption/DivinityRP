@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "./types";
+import type { Character, CharacterImage, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "./types";
 
 export interface RoleplayState {
   characters: Character[];
@@ -23,6 +23,19 @@ export interface RoleplayActions {
   selectCharacter: (character: Character | null) => void;
   updateCharacter: (id: string, patch: Partial<Character>) => void;
   deleteCharacter: (id: string) => void;
+  /**
+   * Attach an image to a SPECIFIC character's own gallery (character.images).
+   * Also mirrors the item into the aggregated gallery tagged with characterId
+   * so it shows in both the per-character view and the global gallery.
+   * De-duplicated by url.
+   */
+  addImageToCharacter: (
+    characterId: string,
+    image: CharacterImage,
+    opts?: { type?: "image" | "video"; setAvatar?: boolean }
+  ) => void;
+  /** Remove an image (by url) from a character's own gallery. */
+  removeImageFromCharacter: (characterId: string, url: string) => void;
   addLoreEntry: (entry: LoreEntry) => void;
   updateLoreEntry: (id: string, entry: Partial<LoreEntry>) => void;
   deleteLoreEntry: (id: string) => void;

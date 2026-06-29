@@ -1,0 +1,12 @@
+# Cloudflare Workers — ignore build + dependency artifacts
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.wrangler/
+**/.wrangler/
+*.log
+
+# Wrangler may write local state here
+.dev.vars
+**/.dev.vars

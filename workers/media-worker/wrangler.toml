@@ -1,0 +1,27 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "divinityrp-media-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-27"
+compatibility_flags = ["nodejs_compat"]
+
+[limits]
+cpu_ms = 30000
+
+[vars]
+APP_ORIGIN = "*"
+MAX_IMAGE_BYTES = "10485760"   # 10 MB
+MAX_VIDEO_BYTES = "104857600"  # 100 MB
+# When set, objects are served from this public base (r2.dev or custom domain).
+# Leave empty to serve bytes through this worker's /file/:key route instead.
+PUBLIC_BASE_URL = ""
+# Require a valid auth-worker JWT for uploads/deletes. "false" only for local testing.
+REQUIRE_AUTH = "true"
+
+# R2 bucket holding all media (character art, gallery uploads, forge refs).
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "divinityrp-media"
+preview_bucket_name = "divinityrp-media-preview"
+
+# Secrets (set with `wrangler secret put`):
+#   JWT_SECRET   - shared HMAC secret used to verify auth-worker tokens

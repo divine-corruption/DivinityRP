@@ -8,7 +8,7 @@ import {
 } from "@/lib/conversation-threads";
 import { RoleplayCtx } from "@/lib/roleplay-store";
 import { restoreExtra, useStateSync } from "@/hooks/use-state-sync";
-import type { Character, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
+import type { Character, CharacterImage, DivinityAIState, LoreBook, LoreDetection, LoreEntry, LoreSuggestion, MediaItem, SidebarView, StoryNode } from "@/lib/types";
 
 function parseSillyTavern(data: Record<string, unknown>): Character {
   const char: Record<string, unknown> = (data?.data as Record<string, unknown> | undefined) || data;
@@ -354,6 +354,91 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
     setSelectedCharacter((prev) => (prev?.id === id ? null : prev));
   }, []);
 
+  // Attach an image to one character's own gallery (character.images) AND mirror
+  // it into the aggregated gallery tagged with characterId, so per-character and
+  // global views stay in sync. De-duplicated by url.
+  const handleAddImageToCharacter = useCallback(
+    (
+      characterId: string,
+      image: CharacterImage,
+      opts?: { type?: "image" | "video"; setAvatar?: boolean }
+    ) => {
+      if (!image?.url) return;
+      let updatedChar: Character | null = null;
+      setCharacters((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== characterId) return c;
+          const exists = c.images?.some((img) => img.url === image.url);
+          const images = exists ? c.images : [...(c.images ?? []), image];
+          const merged: Character = {
+            ...c,
+            images,
+            avatar: opts?.setAvatar ? image.url : c.avatar ?? image.url,
+          };
+          updatedChar = merged;
+          return merged;
+        });
+        saveJSON(STORAGE_KEY_CHARACTERS, updated);
+        return updated;
+      });
+      // Keep selection + active-character payload current if this is the open char.
+      setSelectedCharacter((prev) =>
+        prev?.id === characterId && updatedChar ? updatedChar : prev
+      );
+      // Mirror into the aggregated gallery, tagged with the character.
+      setGalleryItems((prev) => {
+        if (prev.some((m) => m.url === image.url)) return prev;
+        const item: MediaItem = {
+          id: nanoid(),
+          url: image.url,
+          type: opts?.type ?? "image",
+          source: "character",
+          characterId,
+          caption: image.caption,
+          createdAt: Date.now(),
+        };
+        const updated = [...prev, item];
+        saveJSON(STORAGE_KEY_GALLERY, updated);
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleRemoveImageFromCharacter = useCallback(
+    (characterId: string, url: string) => {
+      let updatedChar: Character | null = null;
+      setCharacters((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== characterId) return c;
+          const images = (c.images ?? []).filter((img) => img.url !== url);
+          const merged: Character = {
+            ...c,
+            images,
+            avatar: c.avatar === url ? images[0]?.url : c.avatar,
+          };
+          updatedChar = merged;
+          return merged;
+        });
+        saveJSON(STORAGE_KEY_CHARACTERS, updated);
+        return updated;
+      });
+      setSelectedCharacter((prev) =>
+        prev?.id === characterId && updatedChar ? updatedChar : prev
+      );
+      // Remove the mirrored gallery item too.
+      setGalleryItems((prev) => {
+        const updated = prev.filter(
+          (m) => !(m.url === url && m.characterId === characterId)
+        );
+        if (updated.length === prev.length) return prev;
+        saveJSON(STORAGE_KEY_GALLERY, updated);
+        return updated;
+      });
+    },
+    []
+  );
+
   const handleAddLoreEntry = useCallback((entry: LoreEntry) => {
     setLoreEntries((prev) => {
       const updated = [...prev, entry];
@@ -523,6 +608,8 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       selectCharacter: handleSelectCharacter,
       updateCharacter: handleUpdateCharacter,
       deleteCharacter: handleDeleteCharacter,
+      addImageToCharacter: handleAddImageToCharacter,
+      removeImageFromCharacter: handleRemoveImageFromCharacter,
       addLoreEntry: handleAddLoreEntry,
       updateLoreEntry: handleUpdateLoreEntry,
       deleteLoreEntry: handleDeleteLoreEntry,
@@ -548,6 +635,7 @@ export function RoleplayProvider({ children }: { children: React.ReactNode }) {
       currentView, galleryMedia, galleryItems, divinityAI, loreDetection,
       handleImportCharacter, handleSelectCharacter, handleUpdateCharacter,
       handleDeleteCharacter,
+      handleAddImageToCharacter, handleRemoveImageFromCharacter,
       handleAddLoreEntry, handleUpdateLoreEntry, handleDeleteLoreEntry,
       handleAddStoryNode, handleUpdateStoryNode, handleDeleteStoryNode,
       handleAddGalleryItems, handleClearGalleryItems,

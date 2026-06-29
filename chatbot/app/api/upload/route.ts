@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { join } from "path";
 import { isR2Configured, uploadToR2 } from "@/lib/storage/r2";
+import { mediaWorkerUpload, workers } from "@/lib/workers";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
@@ -70,6 +71,33 @@ export async function POST(request: Request) {
       ? "gallery/videos"
       : "forge";
     const filename = `${prefix}/${randomUUID()}.${ext}`;
+
+    // Most preferred: dedicated Cloudflare media-worker (edge, R2-backed,
+    // per-character scoping, persistent across all app instances).
+    if (workers.media) {
+      try {
+        const result = await mediaWorkerUpload(
+          bytes,
+          file.name || filename,
+          file.type || (isVideo ? "video/mp4" : "image/png"),
+          {
+            characterId: characterId ?? undefined,
+            source: characterId ? undefined : isVideo ? undefined : "forge",
+          }
+        );
+        if (result?.url) {
+          return NextResponse.json({
+            url: result.url,
+            filename: result.key,
+            type: result.type,
+            characterId: result.characterId,
+          });
+        }
+      } catch (err) {
+        // Fall through to the next storage backend rather than failing the upload.
+        console.error("media-worker upload failed, falling back:", err);
+      }
+    }
 
     // Preferred: Cloudflare R2 object storage.
     if (isR2Configured()) {

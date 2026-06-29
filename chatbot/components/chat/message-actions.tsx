@@ -17,6 +17,7 @@ import {
   CopyIcon,
   PencilEditIcon,
   RedoIcon,
+  SparklesIcon,
   ThumbDownIcon,
   ThumbUpIcon,
 } from "./icons";
@@ -132,6 +133,70 @@ export function PureMessageActions({
     }
   };
 
+  // Enrich this assistant reply via the enhance-worker (/api/enhance): richer,
+  // more lust-filled dialogue. Swaps the enhanced text into the message in place.
+  const handleEnhance = async () => {
+    if (!setMessages || !textFromParts) return;
+    setBusy(true);
+    const run = (async () => {
+      const recentContext =
+        typeof window !== "undefined"
+          ? (localStorage.getItem("divine_active_character") ?? undefined)
+          : undefined;
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/enhance`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messageId: message.id,
+            draft: textFromParts,
+            character: recentContext,
+          }),
+        }
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        enhanced?: string;
+        fallback?: boolean;
+      };
+      if (!res.ok || !data.enhanced) {
+        throw new Error("enhance failed");
+      }
+      if (data.fallback || data.enhanced === textFromParts) {
+        return "No changes — enhancement unavailable or already rich.";
+      }
+      const enhanced = data.enhanced;
+      // Swap the enriched text into this message's first text part.
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== message.id) return m;
+          let replaced = false;
+          const parts = (m.parts ?? []).map((p) => {
+            if (!replaced && p.type === "text") {
+              replaced = true;
+              return { ...p, text: enhanced };
+            }
+            return p;
+          });
+          return { ...m, parts };
+        })
+      );
+      return "Enhanced ✨";
+    })();
+    toast.promise(run, {
+      loading: "Enhancing dialogue…",
+      success: (msg) => msg,
+      error: "Failed to enhance response",
+    });
+    try {
+      await run;
+    } catch {
+      /* toast already surfaced it */
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (message.role === "user") {
     return (
       <Actions className="-mr-0.5 justify-end opacity-0 transition-opacity duration-150 group-hover/message:opacity-100">
@@ -179,6 +244,19 @@ export function PureMessageActions({
         >
           <CopyIcon />
         </Action>
+
+        {process.env.NEXT_PUBLIC_ENABLE_RESPONSE_ENHANCEMENT === "true" &&
+          setMessages && (
+            <Action
+              className="text-muted-foreground/50 hover:text-primary disabled:opacity-40"
+              data-testid="message-enhance-button"
+              disabled={busy}
+              onClick={handleEnhance}
+              tooltip="Enhance — richer, more intense dialogue"
+            >
+              <SparklesIcon />
+            </Action>
+          )}
 
         {regenerate && (
           <Action

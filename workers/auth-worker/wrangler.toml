@@ -1,0 +1,26 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "divinityrp-auth-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-27"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ORIGIN = "*"
+# Access-token lifetime (seconds). Default 7 days.
+ACCESS_TTL = "604800"
+# Allow creating throwaway anonymous/guest accounts.
+ALLOW_GUEST = "true"
+
+# D1 database holding users + refresh tokens.
+[[d1_databases]]
+binding = "DB"
+database_name = "divinityrp-auth"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# KV namespace for fast session/revocation lookups.
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (set with `wrangler secret put`):
+#   JWT_SECRET  - shared HMAC secret; MUST match every other worker + the Next.js app

@@ -209,7 +209,7 @@ function CharacterDetailView({
   character: Character;
   onBack: () => void;
 }) {
-  const { selectCharacter, updateCharacter, addGalleryItems, loreBooks, updateLoreBook } = useRoleplay();
+  const { selectCharacter, updateCharacter, addImageToCharacter, loreBooks, updateLoreBook } = useRoleplay();
   const [editing, setEditing] = useState(false);
   const [galleryUploading, setGalleryUploading] = useState(false);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -274,12 +274,16 @@ function CharacterDetailView({
     setGalleryUploading(false);
     const uploaded = results.filter((r): r is MediaItem => r !== null);
     if (uploaded.length > 0) {
-      addGalleryItems(uploaded);
-      // Also add to character.images so they persist in character data
-      const newImages = uploaded.map((u) => ({ url: u.url, caption: u.caption }));
-      updateCharacter(character.id, {
-        images: [...character.images, ...newImages],
-      });
+      // Single atomic action: attaches to THIS character's own gallery
+      // (character.images) AND mirrors into the aggregated gallery tagged with
+      // the characterId, so it shows in both views and persists per-character.
+      for (const u of uploaded) {
+        addImageToCharacter(
+          character.id,
+          { url: u.url, caption: u.caption },
+          { type: u.type }
+        );
+      }
       toast.success(
         uploaded.length === 1
           ? "Added to gallery"

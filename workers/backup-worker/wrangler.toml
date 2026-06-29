@@ -1,0 +1,25 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "divinityrp-backup-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-27"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ORIGIN = "*"
+# Maximum number of versioned history snapshots kept per user (oldest pruned).
+MAX_VERSIONS = "50"
+# Require a valid auth-worker JWT for snapshot/restore/version ops. "false" only for local testing.
+REQUIRE_AUTH = "true"
+
+# R2 bucket holding all per-user roleplay state (latest pointer + history).
+[[r2_buckets]]
+binding = "STATE"
+bucket_name = "divinityrp-state"
+preview_bucket_name = "divinityrp-state-preview"
+
+# Scheduled safety backup / retention heartbeat — every 6 hours.
+[triggers]
+crons = ["0 */6 * * *"]
+
+# Secrets (set with `wrangler secret put`):
+#   JWT_SECRET   - shared HMAC secret used to verify auth-worker tokens
