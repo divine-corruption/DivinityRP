@@ -1,16 +1,73 @@
 import { NextResponse } from "next/server";
 import { xaiChat } from "@/lib/xai";
 
-async function urlToDataUri(url: string): Promise<string> {
-  // If already a data URI, return as-is
+// Base used to resolve app-relative media URLs (/api/media/...) into absolute
+// URLs we can fetch server-side before inlining for xAI.
+function appBaseUrl(request: Request): string {
+  const explicit = (
+    process.env.APP_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "")
+  ).replace(/\/$/, "");
+  if (explicit) return explicit;
+  // Derive from the incoming request as a last resort.
+  const host = request.headers.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
+/**
+ * Resolve any reference-image URL into something xAI can reliably consume.
+ *
+ * Always inline NON-public-bucket images as base64 data URIs by fetching the
+ * bytes server-side. This makes the Forger robust regardless of how the media
+ * is served:
+ *   - app-served /api/media/<key> URLs (relative OR absolute),
+ *   - http:// local-dev URLs,
+ *   - presigned R2 URLs.
+ * Previously only http:// was inlined and every https:// URL was passed through
+ * verbatim — but app-served/presigned https URLs can be unreachable from xAI or
+ * expire, which is why forged characters had missing/broken reference images.
+ *
+ * Genuinely public, stable image hosts (data: URIs already, or a configured R2
+ * public bucket) are passed through untouched to avoid needless re-encoding.
+ */
+async function resolveImageForModel(
+  url: string,
+  request: Request
+): Promise<string> {
+  if (!url) return url;
+  // Already inlined.
   if (url.startsWith("data:")) return url;
-  // If https, pass through (xAI supports it)
-  if (url.startsWith("https://")) return url;
-  // For http (local dev), fetch server-side and convert to base64 data URI
-  const resp = await fetch(url);
-  const buf = Buffer.from(await resp.arrayBuffer());
-  const mime = resp.headers.get("content-type") ?? "image/png";
-  return `data:${mime};base64,${buf.toString("base64")}`;
+
+  const publicBase = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+  // A configured public R2 bucket is directly fetchable by xAI — pass through.
+  if (publicBase && url.startsWith(publicBase)) return url;
+
+  // Resolve relative app URLs (e.g. /api/media/...) to absolute.
+  const absolute = url.startsWith("http")
+    ? url
+    : `${appBaseUrl(request)}${url.startsWith("/") ? "" : "/"}${url}`;
+
+  // Fetch the bytes server-side and inline as a data URI so the model never has
+  // to reach back into our app (which may be private, rate-limited, or serving
+  // a time-limited URL).
+  try {
+    const resp = await fetch(absolute);
+    if (!resp.ok) {
+      throw new Error(`fetch ${resp.status}`);
+    }
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const mime = resp.headers.get("content-type") ?? "image/png";
+    return `data:${mime};base64,${buf.toString("base64")}`;
+  } catch {
+    // Last-ditch: hand the absolute URL to the model and let it try.
+    return absolute;
+  }
 }
 
 const forgePrompt = `You are the Character Forger — a master roleplay author and worldbuilder for an immersive AI roleplay engine. The user provides:
@@ -95,7 +152,7 @@ export async function POST(request: Request) {
     const imageParts = await Promise.all(
       images.map(async (img) => ({
         type: "image_url" as const,
-        image_url: { url: await urlToDataUri(img.url) },
+        image_url: { url: await resolveImageForModel(img.url, request) },
       }))
     );
 

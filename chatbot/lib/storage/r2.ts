@@ -239,16 +239,41 @@ export async function getJsonFromR2<T = unknown>(
   }
 }
 
+// Optional explicit base for the app itself (e.g. https://divinityrp.vercel.app),
+// used to build ABSOLUTE /api/media URLs for server-side consumers (the forge
+// route hands these URLs to xAI, which must fetch them). On Vercel this is set
+// automatically; locally it falls back to a relative path which the browser
+// resolves correctly.
+const APP_BASE_URL = (
+  process.env.APP_BASE_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "")
+).replace(/\/$/, "");
+const BASE_PATH = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").replace(/\/$/, "");
+
 /**
  * Build a servable URL for a stored key.
- * - If R2_PUBLIC_URL is set: returns the public URL.
- * - Otherwise: returns a presigned GET URL (query-string auth).
+ * - If R2_PUBLIC_URL is set: returns the public bucket URL (best — direct CDN).
+ * - Otherwise: returns a STABLE, non-expiring URL pointing at the app's own
+ *   /api/media/<key> proxy route. Absolute when APP_BASE_URL/VERCEL_URL is
+ *   known (so server-side fetchers like the Character Forger can resolve it),
+ *   relative otherwise (the browser resolves it against the current origin).
+ *
+ * The old behaviour returned a presigned GET URL here, which EXPIRED after
+ * R2_PRESIGN_TTL — those URLs were being baked into durable character/gallery
+ * data and silently broke once the TTL lapsed. Presigning is still available
+ * via presignGet() for short-lived, one-off needs.
  */
 export function urlForKey(key: string): string {
   if (R2_PUBLIC_URL) {
     return `${R2_PUBLIC_URL}/${encodeKey(key)}`;
   }
-  return presignGet(key);
+  const path = `${BASE_PATH}/api/media/${encodeKey(key)}`;
+  return APP_BASE_URL ? `${APP_BASE_URL}${path}` : path;
 }
 
 /** Generate a presigned GET URL (SigV4 query auth). */
